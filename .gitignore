@@ -1,0 +1,6 @@
+/.claude/
+/.idea/
+/backend/build/
+/backend/dist/
+/backend/logs/
+/frontend/node_modules/
