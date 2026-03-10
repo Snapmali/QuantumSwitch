@@ -29,7 +29,6 @@ else:
 
 
 class Settings(BaseSettings):
-    """Application settings with environment variable support."""
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
