@@ -179,7 +179,7 @@ class ConfigResponse(BaseModel):
     """Response schema for configuration."""
     model_config = ConfigDict(populate_by_name=True)
 
-    appName: str = Field(default="Quantum Selector")
+    appName: str = Field(default="Quantum Switch")
     appVersion: str
     gameProcessName: str
     gameRunning: bool

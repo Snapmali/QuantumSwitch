@@ -530,4 +530,77 @@ const handleIntervalChange = (value: number) => {
     min-width: 36px;
   }
 }
+
+/* Small mobile optimizations */
+@media (max-width: 480px) {
+  .game-status {
+    margin-bottom: 12px;
+  }
+
+  .status-content {
+    padding: 4px;
+  }
+
+  .status-header {
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+
+  .status-label {
+    font-size: 14px;
+  }
+
+  .status-actions {
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+
+  .status-actions .el-tag {
+    font-size: 12px;
+    padding: 0 8px;
+    height: 28px;
+    line-height: 26px;
+  }
+
+  .refresh-row {
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+
+  .interval-row {
+    padding-top: 6px;
+    gap: 8px;
+  }
+
+  .refresh-hint {
+    font-size: 11px;
+  }
+
+  .interval-label {
+    font-size: 13px;
+    min-width: auto;
+  }
+
+  .interval-value {
+    font-size: 13px;
+  }
+
+  .detail-item {
+    gap: 4px;
+    flex-wrap: wrap;
+  }
+
+  .detail-label {
+    font-size: 13px;
+    min-width: auto;
+  }
+
+  .offset-value {
+    font-size: 11px;
+  }
+
+  .refresh-controls :deep(.el-slider__marks-text) {
+    font-size: 10px;
+  }
+}
 </style>

@@ -72,7 +72,7 @@ class Settings(BaseSettings):
         return None
 
     # App settings
-    APP_NAME: str = "Quantum Selector"
+    APP_NAME: str = "Quantum Switch"
     APP_VERSION: str = "1.0.0"
     DEBUG: bool = False
 

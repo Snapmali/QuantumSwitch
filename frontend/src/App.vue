@@ -67,5 +67,62 @@ body {
     height: 36px;
     line-height: 36px;
   }
+
+  /* Ensure text wraps on mobile */
+  * {
+    word-wrap: break-word;
+  }
+}
+
+/* Small mobile optimizations */
+@media (max-width: 480px) {
+  .el-button {
+    min-height: 36px;
+    min-width: 36px;
+  }
+
+  .el-input__inner {
+    min-height: 36px;
+  }
+
+  .el-card {
+    border-radius: 8px;
+  }
+
+  .el-pagination .el-pager li {
+    min-width: 32px;
+    height: 32px;
+    line-height: 32px;
+    font-size: 12px;
+  }
+
+  .el-pagination button {
+    min-width: 32px;
+    height: 32px;
+    line-height: 32px;
+  }
+
+  /* Prevent horizontal overflow */
+  body {
+    overflow-x: hidden;
+  }
+
+  /* Ensure all containers respect viewport width */
+  .el-card, .el-dialog {
+    max-width: 100vw;
+    box-sizing: border-box;
+  }
+
+  /* Dialog responsive */
+  .el-dialog {
+    width: 90% !important;
+    margin: 10vh auto !important;
+  }
+
+  /* Ensure text wraps properly */
+  * {
+    word-wrap: break-word;
+    overflow-wrap: break-word;
+  }
 }
 </style>

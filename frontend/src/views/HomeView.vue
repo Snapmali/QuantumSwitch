@@ -3,7 +3,6 @@ import { ref, onMounted, onUnmounted, computed, watch } from 'vue'
 import { useSongStore } from '@/stores/songs'
 import { useGameStore } from '@/stores/game'
 import { ElMessage } from 'element-plus'
-import { Headset } from '@element-plus/icons-vue'
 import type { Song } from '@/types'
 import SongList from '@/components/SongList.vue'
 import SongDetail from '@/components/SongDetail.vue'
@@ -110,8 +109,8 @@ const handleSearch = async (query: string) => {
     <header class="app-header">
       <div class="header-content">
         <h1>
-          <el-icon><headset /></el-icon>
-          Quantum Selector
+          <img src="/icon.ico" alt="icon" class="header-icon" />
+          Quantum Switch
         </h1>
         <span class="version">v1.0.0</span>
       </div>
@@ -168,6 +167,7 @@ const handleSearch = async (query: string) => {
   display: flex;
   flex-direction: column;
   background-color: var(--el-bg-color-page);
+  overflow-x: hidden;
 }
 
 .app-header {
@@ -193,6 +193,12 @@ const handleSearch = async (query: string) => {
   align-items: center;
   gap: 8px;
   color: var(--el-text-color-primary);
+}
+
+.header-icon {
+  width: 28px;
+  height: 28px;
+  object-fit: contain;
 }
 
 .version {
@@ -244,12 +250,14 @@ const handleSearch = async (query: string) => {
 .detail-card {
   height: 100%;
   overflow: hidden;
+  max-width: 100%;
 }
 
 .detail-card :deep(.el-card__body) {
   height: 100%;
   padding: 0;
   overflow: hidden;
+  max-width: 100%;
 }
 
 @media (max-width: 1024px) {
@@ -284,42 +292,70 @@ const handleSearch = async (query: string) => {
 /* Mobile optimizations */
 @media (max-width: 768px) {
   .app-header {
-    padding: 0 16px;
+    padding: 0 12px;
   }
 
   .header-content {
-    height: 56px;
+    height: 52px;
   }
 
   .app-header h1 {
-    font-size: 18px;
+    font-size: 16px;
+  }
+
+  .header-icon {
+    width: 22px;
+    height: 22px;
   }
 
   .version {
-    padding: 3px 10px;
-    font-size: 11px;
+    padding: 2px 8px;
+    font-size: 10px;
   }
 
   .main-content {
-    padding: 16px;
+    padding: 12px;
   }
 
   .content-grid {
-    gap: 16px;
-    min-height: calc(100dvh - 88px);
+    gap: 12px;
+    min-height: calc(100dvh - 80px);
   }
 
   .left-column,
   .right-column {
-    gap: 12px;
+    gap: 10px;
   }
 
   .song-list-card {
-    min-height: 350px;
+    min-height: 300px;
   }
 
   .detail-card {
-    min-height: 400px;
+    min-height: 350px;
+  }
+}
+
+/* Small mobile optimizations */
+@media (max-width: 480px) {
+  .main-content {
+    padding: 8px;
+  }
+
+  .content-grid {
+    gap: 8px;
+    min-height: calc(100dvh - 76px);
+  }
+
+  .left-column,
+  .right-column {
+    max-width: 100%;
+    overflow-x: hidden;
+  }
+
+  .song-list-card,
+  .detail-card {
+    max-width: 100%;
   }
 }
 </style>

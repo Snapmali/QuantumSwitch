@@ -1,7 +1,7 @@
 @echo off
 chcp 65001 >nul
 echo ==========================================
-echo Quantum Selector Windows Build Script
+echo Quantum Switch Windows Build Script
 echo ==========================================
 echo.
 
@@ -44,8 +44,6 @@ if not exist "frontend\dist" (
     exit /b 1
 )
 
-cd backend
-
 :: Activate virtual environment
 echo [INFO] Activating virtual environment...
 if exist ".venv\Scripts\activate.bat" (
@@ -70,6 +68,8 @@ if errorlevel 1 (
     pip install pyinstaller
 )
 
+cd backend
+
 :: Clean previous build
 echo [INFO] Cleaning previous build...
 rmdir /s /q build 2>nul
@@ -86,28 +86,37 @@ if errorlevel 1 (
 
 :: Create output structure
 echo [INFO] Creating output structure...
-mkdir "dist\QuantumSelector\config" 2>nul
-mkdir "dist\QuantumSelector\logs" 2>nul
+mkdir "dist\QuantumSwitch\config" 2>nul
+mkdir "dist\QuantumSwitch\logs" 2>nul
 
 :: Copy executable
-copy "dist\QuantumSelector.exe" "dist\QuantumSelector\"
+copy "dist\QuantumSwitch.exe" "dist\QuantumSwitch\"
 
 :: Copy config template
-copy ".env" "dist\QuantumSelector\config\.env.template"
+copy ".env" "dist\QuantumSwitch\config\.env.template"
 
 :: Copy data files
-xcopy "data" "dist\QuantumSelector\data" /s /i /y
+echo [INFO] Copying data files...
+xcopy "data" "dist\QuantumSwitch\data\" /s /i /y
+
+:: Copy frontend dist to bundled app
+echo [INFO] Copying frontend files...
+xcopy "..\frontend\dist" "dist\QuantumSwitch\frontend\dist\" /s /i /y
+
+:: Copy icon to bundled app root
+echo [INFO] Copying icon file...
+copy "icon.ico" "dist\QuantumSwitch\"
 
 echo.
 echo ==========================================
 echo Build completed successfully!
-echo Output: backend/dist/QuantumSelector/
+echo Output: backend/dist/QuantumSwitch/
 echo ==========================================
 echo.
 echo Next steps:
-echo 1. Edit backend/dist/QuantumSelector/config/.env.template
+echo 1. Edit backend/dist/QuantumSwitch/config/.env.template
 echo 2. Rename it to .env
 echo 3. Set your GAME_MODS_DIRECTORY path
-echo 4. Run QuantumSelector.exe
+echo 4. Run QuantumSwitch.exe
 echo.
 pause

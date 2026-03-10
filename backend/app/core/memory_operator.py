@@ -17,14 +17,14 @@ class MemoryOperator:
     @property
     def eden_offset(self) -> int:
         """Get the Eden offset (cached)."""
-        if self._eden_offset is None:
+        if self._eden_offset is None or not self._pm.eden_checked:
             self._detect_eden_version()
         return self._eden_offset
 
     @property
     def is_eden_version(self) -> bool:
         """Check if running Eden version."""
-        if self._eden_offset is None:
+        if self._eden_offset is None or not self._pm.eden_checked:
             self._detect_eden_version()
         return self._is_eden_version
 
@@ -66,6 +66,8 @@ class MemoryOperator:
             self._is_eden_version = False
             logger.info("Detected standard version (no offset)")
 
+        self._pm.set_eden_checked()
+
     def _get_data_address(self, base_addr: int, skip_eden: bool = False) -> int:
         """
         Get the actual data address, accounting for base address and Eden offset.
@@ -75,8 +77,6 @@ class MemoryOperator:
             base_addr: The base address from configuration
             skip_eden: If True, skip adding Eden offset (used during Eden detection)
         """
-        base = self._pm.base_address or 0
-
         eden_offset = 0
         if not skip_eden and base_addr:
             # Use _eden_offset directly to avoid triggering detection
@@ -85,6 +85,8 @@ class MemoryOperator:
         # Control addresses (CHANGE_SONG_SELECT, START_CHANGE) are absolute addresses
         if base_addr in [settings.CHANGE_SONG_SELECT_ADDR, settings.START_CHANGE_ADDR]:
             eden_offset = 0
+
+        base = self._pm.base_address or 0
 
         # Data addresses: base + offset + eden_offset
         result = base_addr + base + eden_offset
@@ -247,9 +249,9 @@ class MemoryOperator:
         """
         pvid = self.read_int32(settings.LAST_SELECT_PVID_ADDR)
         sort_id = self.read_int32(settings.LAST_SELECT_SORT_ADDR)
-        diff = self.read_int32(settings.LAST_SELECT_DIFF_TYPE_ADDR)
+        diff_type = self.read_int32(settings.LAST_SELECT_DIFF_TYPE_ADDR)
         diff_level = self.read_int32(settings.LAST_SELECT_DIFF_LEVEL_ADDR)
 
-        logger.debug(f"pvid: {pvid}, sort_id: {sort_id}, diff: {diff}, diff_level: {diff_level}")
+        logger.debug(f"pvid: {pvid}, sort_id: {sort_id}, diff_type: {diff_type}, diff_level: {diff_level}")
 
-        return pvid, sort_id, diff
+        return pvid, sort_id, diff_type

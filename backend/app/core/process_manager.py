@@ -27,6 +27,7 @@ class ProcessManager:
         self._process_handle: Optional[wintypes.HANDLE] = None
         self._process_id: Optional[int] = None
         self._base_address: Optional[int] = None
+        self._eden_checked = False
 
     @property
     def is_attached(self) -> bool:
@@ -48,6 +49,11 @@ class ProcessManager:
         """Get the process base address."""
         return self._base_address
 
+    @property
+    def eden_checked(self) -> bool:
+        """Get is eden version checked."""
+        return self._eden_checked
+
     def find_process(self) -> Optional[Tuple[int, int]]:
         """
         Find the game process by name.
@@ -59,6 +65,11 @@ class ProcessManager:
             try:
                 if proc.info['name'] == self.process_name:
                     pid = proc.info['pid']
+
+                    # Check whether the current process is a brand-new process
+                    if self.is_attached and self._process_id != pid:
+                        self.detach()
+
                     # Get base address using psutil
                     p = psutil.Process(pid)
                     # For 64-bit Windows, the base address is typically 0x140000000
@@ -68,6 +79,9 @@ class ProcessManager:
                     return pid, base_addr
             except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
                 continue
+
+        if self.is_attached:
+            self.detach()
         return None
 
     def _get_module_base_address(self, pid: int) -> int:
@@ -110,13 +124,13 @@ class ProcessManager:
         Returns:
             True if successfully attached, False otherwise
         """
-        if self.is_attached:
-            return True
-
         result = self.find_process()
         if result is None:
             logger.warning(f"Process {self.process_name} not found")
             return False
+
+        if self.is_attached:
+            return True
 
         pid, base_addr = result
         self._process_id = pid
@@ -138,6 +152,9 @@ class ProcessManager:
             logger.error(f"Failed to open process {pid}. Error code: {error_code}")
             logger.error("Try running as administrator.")
             self._process_handle = None
+            self._process_id = None
+            self._base_address = None
+            self._eden_checked = False
             return False
 
         logger.info(f"Successfully attached to process {pid}")
@@ -154,6 +171,8 @@ class ProcessManager:
 
         self._process_handle = None
         self._process_id = None
+        self._base_address = None
+        self._eden_checked = False
 
     def __enter__(self):
         """Context manager entry."""
@@ -181,3 +200,8 @@ class ProcessManager:
             "pid": self._process_id,
             "base_address": self._base_address,
         }
+
+    def set_eden_checked(self):
+        """Get whether eden version is checked."""
+        self._eden_checked = True
+        logger.debug(f"Eden version checked: {self._eden_checked}")

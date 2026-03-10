@@ -89,7 +89,7 @@ def main():
         host=settings.HOST,
         port=settings.PORT,
         reload=settings.DEBUG and not IS_FROZEN,  # Disable reload in frozen mode
-        log_level="info"
+        log_level="debug" if settings.DEBUG else "info"
     )
 
 

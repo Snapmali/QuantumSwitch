@@ -14,10 +14,12 @@ defineExpose({ open })
   <el-dialog
     v-model="visible"
     title="⚠️ 重要警告"
-    width="500px"
+    width="90%"
+    :max-width="500"
     :close-on-click-modal="false"
     :show-close="false"
     :close-on-press-escape="false"
+    class="warning-dialog"
   >
     <div class="warning-content">
       <el-alert
@@ -82,5 +84,33 @@ defineExpose({ open })
 
 :deep(.el-alert__description) {
   line-height: 1.6;
+}
+
+/* Mobile responsive */
+@media (max-width: 768px) {
+  .warning-dialog {
+    width: 90% !important;
+    max-width: 400px;
+  }
+
+  .warning-list,
+  .confirm-list {
+    padding-left: 16px;
+    font-size: 14px;
+  }
+}
+
+@media (max-width: 480px) {
+  .warning-dialog {
+    width: 95% !important;
+    max-width: 350px;
+  }
+
+  .warning-list,
+  .confirm-list {
+    padding-left: 12px;
+    font-size: 13px;
+    line-height: 1.6;
+  }
 }
 </style>

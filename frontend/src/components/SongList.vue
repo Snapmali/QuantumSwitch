@@ -174,7 +174,7 @@ const formatLevel = (level: number): string => {
         v-model:current-page="currentPage"
         :page-size="pageSize || 20"
         :total="total || 0"
-        layout="prev, pager, next, jumper"
+        layout="prev, pager, next"
         size="small"
         background
       />
@@ -208,6 +208,7 @@ const formatLevel = (level: number): string => {
 
 .difficulty-filter {
   width: 150px;
+  min-width: 120px;
 }
 
 .songs-container {
@@ -468,6 +469,103 @@ const formatLevel = (level: number): string => {
 
   .pagination-section :deep(.el-pagination__jump) {
     font-size: 13px;
+  }
+}
+
+/* Small mobile optimizations */
+@media (max-width: 480px) {
+  .search-section {
+    padding: 10px;
+    gap: 8px;
+  }
+
+  .search-input {
+    min-width: 100%;
+    width: 100%;
+  }
+
+  .search-input :deep(.el-input__inner) {
+    font-size: 16px;
+  }
+
+  .difficulty-filter {
+    width: calc(100% - 44px);
+    min-width: auto;
+  }
+
+  .difficulty-filter :deep(.el-input__inner) {
+    font-size: 14px;
+  }
+
+  .search-section .el-button {
+    width: 36px;
+    height: 36px;
+  }
+
+  .song-item {
+    padding: 12px 10px;
+    gap: 8px;
+  }
+
+  .song-main-row {
+    gap: 8px;
+  }
+
+  .song-name {
+    font-size: 14px;
+    word-break: break-word;
+    line-height: 1.4;
+  }
+
+  .song-name-en {
+    font-size: 11px;
+    word-break: break-word;
+  }
+
+  .song-meta {
+    flex-direction: row;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .song-id {
+    font-size: 11px;
+  }
+
+  .song-difficulties {
+    gap: 4px;
+  }
+
+  .diff-tag-static {
+    min-width: 36px;
+    height: 24px;
+    font-size: 12px;
+    padding: 0 6px;
+  }
+
+  .pagination-section {
+    padding: 8px 4px;
+  }
+
+  .pagination-section :deep(.el-pagination .btn-prev),
+  .pagination-section :deep(.el-pagination .btn-next) {
+    min-width: 32px;
+    height: 32px;
+  }
+
+  .pagination-section :deep(.el-pagination .el-pager li) {
+    min-width: 32px;
+    height: 32px;
+    line-height: 32px;
+  }
+
+  .pagination-section :deep(.el-pagination__jump) {
+    margin-left: 4px;
+  }
+
+  .song-count {
+    padding: 10px;
+    font-size: 11px;
   }
 }
 </style>

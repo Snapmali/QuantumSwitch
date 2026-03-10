@@ -37,7 +37,7 @@ async def get_config():
     return ApiResponse(
         success=True,
         data=ConfigResponse(
-            appName=settings.APP_NAME if hasattr(settings, 'APP_NAME') else "Quantum Selector",
+            appName=settings.APP_NAME if hasattr(settings, 'APP_NAME') else "Quantum Switch",
             appVersion=settings.APP_VERSION,
             gameProcessName=settings.GAME_PROCESS_NAME,
             gameRunning=process_info is not None,

@@ -313,6 +313,9 @@ const hasCredits = computed(() => {
   padding: 20px;
   height: 100%;
   overflow-y: auto;
+  overflow-x: hidden;
+  max-width: 100%;
+  box-sizing: border-box;
 }
 
 .empty-detail {
@@ -353,9 +356,15 @@ const hasCredits = computed(() => {
   font-weight: 600;
   color: var(--el-text-color-primary);
   line-height: 1.3;
-  height: 24px;
+  min-height: 24px;
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
+  overflow: hidden;
+}
+
+.song-name .el-tag {
+  flex-shrink: 0;
 }
 
 .song-reading {
@@ -403,6 +412,7 @@ const hasCredits = computed(() => {
   flex-direction: row;
   flex-wrap: wrap;
   gap: 8px;
+  width: 100%;
 }
 
 .difficulty-card {
@@ -419,6 +429,7 @@ const hasCredits = computed(() => {
   overflow: hidden;
   background: #fff;
   position: relative;
+  box-sizing: border-box;
 }
 
 .difficulty-card:hover {
@@ -637,6 +648,7 @@ const hasCredits = computed(() => {
   align-items: center;
   gap: 8px;
   margin-bottom: 6px;
+  flex-wrap: wrap;
 }
 
 .mod-index {
@@ -704,16 +716,24 @@ const hasCredits = computed(() => {
   display: flex;
   justify-content: space-between;
   gap: 12px;
-  padding: 6px 10px;
+  padding: 10px 14px;
   background: #f6f8fa;
-  border-radius: 4px;
+  border-radius: 6px;
   font-size: 12px;
+  max-width: 100%;
+  overflow: hidden;
+  min-height: 36px;
+  align-items: center;
 }
 
 .attribute-key {
   color: #656d76;
   font-family: monospace;
   flex-shrink: 0;
+  max-width: 50%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .attribute-value {
@@ -761,6 +781,11 @@ const hasCredits = computed(() => {
     font-size: 17px;
     height: auto;
     line-height: 1.4;
+    white-space: normal;
+  }
+
+  .song-name .el-tag {
+    margin-left: 4px;
   }
 
   .song-reading {
@@ -786,6 +811,7 @@ const hasCredits = computed(() => {
     min-width: calc(50% - 4px);
     max-width: none;
     height: 68px;
+    flex: 0 0 calc(50% - 4px);
   }
 
   .difficulty-content {
@@ -845,7 +871,175 @@ const hasCredits = computed(() => {
   }
 
   .attribute-item {
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .attribute-key {
+    max-width: 100%;
+  }
+
+  .attribute-value {
+    text-align: left;
+    word-break: break-all;
+  }
+}
+
+/* Small mobile optimizations */
+@media (max-width: 480px) {
+  .song-detail {
+    padding: 12px;
+    max-width: 100%;
+    box-sizing: border-box;
+  }
+
+  .song-header {
+    min-height: 70px;
+    gap: 10px;
+  }
+
+  .song-icon {
+    width: 48px;
+    height: 48px;
+  }
+
+  .song-icon .el-icon {
+    font-size: 28px;
+  }
+
+  .song-titles {
+    max-width: calc(100% - 58px);
+  }
+
+  .song-name {
+    font-size: 15px;
+    white-space: normal;
+    height: auto;
+    min-height: 24px;
+    word-break: break-word;
+  }
+
+  .song-name .el-tag {
+    margin-left: 4px;
+    margin-top: 2px;
+  }
+
+  .song-reading {
+    font-size: 12px;
+  }
+
+  .song-name-en {
+    font-size: 11px;
+  }
+
+  .song-badges {
+    margin-top: 6px;
+  }
+
+  .difficulty-card {
+    min-width: 100%;
+    max-width: 100%;
+    height: 60px;
+    flex: 0 0 100%;
+  }
+
+  .difficulty-list {
+    gap: 6px;
+  }
+
+  .difficulty-badge {
+    width: 32px;
+    height: 32px;
+    font-size: 12px;
+  }
+
+  .difficulty-content {
+    padding: 0 10px;
+    gap: 8px;
+  }
+
+  .difficulty-name {
+    font-size: 13px;
+    white-space: normal;
+    word-break: break-word;
+  }
+
+  .action-section .el-button {
+    padding: 14px;
+    font-size: 15px;
+    min-height: 44px;
+  }
+
+  .metadata-grid {
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+
+  .metadata-item {
     padding: 8px 12px;
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+  }
+
+  .metadata-label {
+    font-size: 11px;
+  }
+
+  .metadata-value {
+    font-size: 13px;
+    word-break: break-word;
+    text-align: right;
+    flex: 1;
+  }
+
+  .mod-item {
+    padding: 12px;
+  }
+
+  .mod-header {
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+
+  .mod-name {
+    font-size: 14px;
+    word-break: break-word;
+    flex: 1;
+  }
+
+  .mod-meta {
+    gap: 8px;
+    font-size: 11px;
+  }
+
+  .mod-list .mod-path {
+    font-size: 10px;
+    word-break: break-all;
+    white-space: normal;
+  }
+
+  .attribute-item {
+    flex-direction: column;
+    gap: 4px;
+    padding: 8px 10px;
+  }
+
+  .attribute-key {
+    max-width: 100%;
+    word-break: break-all;
+  }
+
+  .attribute-value {
+    text-align: left;
+    word-break: break-all;
+    max-width: 100%;
+  }
+
+  .section-title {
+    font-size: 14px;
+    margin-bottom: 12px;
   }
 }
 </style>

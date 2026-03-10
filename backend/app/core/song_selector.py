@@ -117,18 +117,18 @@ class SongSelector:
         - Step 4: Initialize switch (CHANGE_SONG_SELECT = 6, START_CHANGE = 2)
         - Step 5: Wait 100ms
         - Step 6: Prepare data (write DIFF_TYPE, PVID)
-        - Step 7: Set sort (write SORT, DIFF_LEVEL = 19)
+        - Step 7: Set sort (write SORT = 1, DIFF_LEVEL = 19)
         - Step 8: Trigger switch (CHANGE_SONG_SELECT = 5, START_CHANGE = 2)
         """
         try:
             # Step 4: Initialize switch
             logger.debug("Step 4: Initialize switch")
-            # Write CHANGE_SONG_SELECT = 6 (prepare state)
+            # Write CHANGE_SONG_SELECT = 6 (switch to Custom playlists)
             if not self._mem.write_int8(settings.CHANGE_SONG_SELECT_ADDR, 6, skip_eden=True):
                 logger.error("Failed to set CHANGE_SONG_SELECT = 6")
                 return False
 
-            # Write START_CHANGE = 2 (trigger value per spec)
+            # Write START_CHANGE = 2 (triggering menu switch)
             if not self._mem.write_int8(settings.START_CHANGE_ADDR, 2, skip_eden=True):
                 logger.error("Failed to set START_CHANGE = 2")
                 return False
@@ -151,25 +151,24 @@ class SongSelector:
 
             # Step 7: Set sort (selectSort)
             logger.debug("Step 7: Set sort")
-            # Write sort index (default 1 per spec)
-            sort_index = 19
+            # Write LAST_SELECT_SORT_ADDR = 1 (sort by difficulty level)
             if not self._mem.write_int32(settings.LAST_SELECT_SORT_ADDR, 1):
                 logger.error("Failed to write SORT")
                 return False
 
-            # Write difficulty level (same as sort_index per spec)
-            if not self._mem.write_int32(settings.LAST_SELECT_DIFF_LEVEL_ADDR, sort_index):
+            # Write LAST_SELECT_DIFF_LEVEL_ADDR = 19 (difficulty level = ALL)
+            if not self._mem.write_int32(settings.LAST_SELECT_DIFF_LEVEL_ADDR, 19):
                 logger.error("Failed to write DIFF_LEVEL")
                 return False
 
             # Step 8: Trigger switch
             logger.debug("Step 8: Trigger switch")
-            # Write CHANGE_SONG_SELECT = 5 (execute state)
+            # Write CHANGE_SONG_SELECT = 5 (switch to Rhythm Game)
             if not self._mem.write_int8(settings.CHANGE_SONG_SELECT_ADDR, 5, skip_eden=True):
                 logger.error("Failed to set CHANGE_SONG_SELECT = 5")
                 return False
 
-            # Write START_CHANGE = 2 (trigger value per spec)
+            # Write START_CHANGE = 2 (triggering menu switch)
             if not self._mem.write_int8(settings.START_CHANGE_ADDR, 2, skip_eden=True):
                 logger.error("Failed to set START_CHANGE = 2")
                 return False
@@ -209,19 +208,18 @@ class SongSelector:
                 logger.error("Delayed mode: Failed to write PVID")
                 return False
 
-            sort_index = 19  # Default sort index per technical specification
-            # selectSort: Write sort index and diff level (default 1 per spec)
+            # Write LAST_SELECT_SORT_ADDR = 1 (sort by difficulty level)
             if not self._mem.write_int32(settings.LAST_SELECT_SORT_ADDR, 1):
                 logger.error("Delayed mode: Failed to write SORT")
                 return False
 
-            # Note: DIFF_LEVEL is set to the same value as sort_index per spec
-            if not self._mem.write_int32(settings.LAST_SELECT_DIFF_LEVEL_ADDR, sort_index):
+            # Write LAST_SELECT_DIFF_LEVEL_ADDR = 19 (difficulty level = ALL)
+            if not self._mem.write_int32(settings.LAST_SELECT_DIFF_LEVEL_ADDR, 19):
                 logger.error("Delayed mode: Failed to write DIFF_LEVEL")
                 return False
 
             # Note: We don't trigger CHANGE_SONG_SELECT or START_CHANGE here
-            # The change will be applied when user presses SPACE to enter song selection
+            # The change will be applied when user presses ENTER to enter song selection
 
             logger.info(
                 f"Delayed switch prepared for song {song.id} ({song.name}) "
