@@ -174,7 +174,8 @@ const formatLevel = (level: number): string => {
         v-model:current-page="currentPage"
         :page-size="pageSize || 20"
         :total="total || 0"
-        layout="prev, pager, next"
+        layout="prev, pager, next, jumper"
+        :pager-count="5"
         size="small"
         background
       />
@@ -408,6 +409,15 @@ const formatLevel = (level: number): string => {
   width: 40px;
 }
 
+/* Hide "Go to" text in jumper */
+.pagination-section :deep(.el-pagination__goto) {
+  display: none;
+}
+
+.pagination-section :deep(.el-pagination__classifier) {
+  display: none;
+}
+
 /* Mobile optimizations */
 @media (max-width: 768px) {
   .search-section {
@@ -460,15 +470,24 @@ const formatLevel = (level: number): string => {
 
   .pagination-section {
     padding: 10px 6px;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
   }
 
   .pagination-section :deep(.el-pagination) {
     --el-pagination-button-width: 36px;
     --el-pagination-button-height: 36px;
+    white-space: nowrap;
+    min-width: min-content;
   }
 
   .pagination-section :deep(.el-pagination__jump) {
     font-size: 13px;
+    margin-left: 8px;
+  }
+
+  .pagination-section :deep(.el-pagination__editor.el-input) {
+    width: 40px;
   }
 }
 
@@ -523,9 +542,9 @@ const formatLevel = (level: number): string => {
   }
 
   .song-meta {
-    flex-direction: row;
-    align-items: center;
-    gap: 6px;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 4px;
   }
 
   .song-id {
@@ -545,27 +564,59 @@ const formatLevel = (level: number): string => {
 
   .pagination-section {
     padding: 8px 4px;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .pagination-section :deep(.el-pagination) {
+    white-space: nowrap;
+    min-width: min-content;
   }
 
   .pagination-section :deep(.el-pagination .btn-prev),
   .pagination-section :deep(.el-pagination .btn-next) {
-    min-width: 32px;
-    height: 32px;
+    min-width: 28px;
+    height: 28px;
   }
 
   .pagination-section :deep(.el-pagination .el-pager li) {
-    min-width: 32px;
-    height: 32px;
-    line-height: 32px;
+    min-width: 28px;
+    height: 28px;
+    line-height: 28px;
+    font-size: 12px;
   }
 
   .pagination-section :deep(.el-pagination__jump) {
-    margin-left: 4px;
+    margin-left: 2px;
+    font-size: 12px;
+  }
+
+  .pagination-section :deep(.el-pagination__editor.el-input) {
+    width: 30px;
+    margin: 0 2px;
+  }
+
+  .pagination-section :deep(.el-pagination__editor.el-input .el-input__inner) {
+    padding: 0 1px;
+    height: 24px;
+    line-height: 24px;
+    font-size: 11px;
+  }
+
+  .pagination-section :deep(.el-pagination__total) {
+    font-size: 11px;
   }
 
   .song-count {
     padding: 10px;
     font-size: 11px;
+  }
+}
+
+/* Extra small mobile - hide jumper to save space */
+@media (max-width: 375px) {
+  .pagination-section :deep(.el-pagination__jump) {
+    display: none;
   }
 }
 </style>

@@ -1,4 +1,20 @@
-"""Song selector implementation for switching songs in-game."""
+"""Song selector implementation for switching songs in-game.
+
+Core Logic Acknowledgment:
+    The song switching implementation in this module is based on the core logic
+    from hiki8man's Select Song with PVID and sasnchis's DivaSongViewer:
+    https://gamebanana.com/tools/21051
+    https://gamebanana.com/tools/18296
+    https://github.com/sasnchis/DivaSongViewer/tree/master
+
+    Specifically, the following aspects are derived from these projects:
+    - Memory address layout and offsets for song selection
+    - The game state detection mechanism using CHANGE_SONG_SELECT
+    - The standard switch procedure and delayed switch procedure
+    - The sequence of writing PVID, difficulty type, sort, and difficulty level
+
+    Huge thanks to hiki8man and sasnchis for reverse engineering and documenting these techniques.
+"""
 import time
 from enum import Enum
 from typing import Optional, Tuple

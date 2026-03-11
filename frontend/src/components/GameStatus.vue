@@ -296,6 +296,10 @@ const handleIntervalChange = (value: number) => {
   font-weight: 500;
   min-width: 30px;
   text-align: right;
+  display: inline-flex;
+  align-items: center;
+  height: 32px;
+  line-height: 32px;
 }
 
 .status-actions {
@@ -501,18 +505,34 @@ const handleIntervalChange = (value: number) => {
     padding-left: 0;
     padding-top: 8px;
     border-top: 1px dashed var(--el-border-color-lighter);
-    flex-direction: column;
-    align-items: stretch;
+    flex-direction: row;
+    align-items: center;
     gap: 10px;
+    flex-wrap: nowrap;
+  }
+
+  .interval-row .el-slider {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .interval-row .interval-value {
+    display: flex;
+    align-items: center;
+    height: 32px;
+    line-height: 32px;
   }
 
   .interval-label {
     font-size: 14px;
+    min-width: auto;
   }
 
   .interval-value {
-    text-align: left;
+    text-align: right;
     font-size: 14px;
+    min-width: 25px;
+    white-space: nowrap;
   }
 
   .detail-item {
@@ -528,6 +548,13 @@ const handleIntervalChange = (value: number) => {
   .status-actions .el-button {
     min-height: 36px;
     min-width: 36px;
+  }
+}
+
+/* 480px-768px range - ensure slider fits */
+@media (max-width: 600px) and (min-width: 481px) {
+  .refresh-controls :deep(.el-slider__marks-text) {
+    font-size: 9px;
   }
 }
 
@@ -570,6 +597,21 @@ const handleIntervalChange = (value: number) => {
   .interval-row {
     padding-top: 6px;
     gap: 8px;
+    flex-direction: row;
+    align-items: center;
+  }
+
+  .interval-row .el-slider {
+    flex: 1;
+  }
+
+  .interval-row .interval-value {
+    display: flex;
+    align-items: center;
+    min-width: 25px;
+    text-align: right;
+    height: 32px;
+    line-height: 32px;
   }
 
   .refresh-hint {
@@ -579,10 +621,6 @@ const handleIntervalChange = (value: number) => {
   .interval-label {
     font-size: 13px;
     min-width: auto;
-  }
-
-  .interval-value {
-    font-size: 13px;
   }
 
   .detail-item {
@@ -601,6 +639,51 @@ const handleIntervalChange = (value: number) => {
 
   .refresh-controls :deep(.el-slider__marks-text) {
     font-size: 10px;
+  }
+
+  .interval-row {
+    position: relative;
+    padding-bottom: 0;
+    align-items: center;
+  }
+
+  .interval-row .el-slider {
+    margin-right: 40px;
+  }
+
+  .interval-value {
+    position: absolute;
+    right: 0;
+    top: 50%;
+    transform: translateY(-50%);
+    display: flex;
+    align-items: center;
+    height: 32px;
+    line-height: 32px;
+  }
+}
+
+/* Extra small mobile - hide slider marks */
+@media (max-width: 360px) {
+  .refresh-controls :deep(.el-slider__marks-text) {
+    display: none;
+  }
+
+  .interval-row {
+    padding-bottom: 0;
+  }
+
+  .interval-row .el-slider {
+    margin-right: 0;
+  }
+
+  .interval-value {
+    position: static;
+    text-align: center;
+    margin-top: 4px;
+    height: auto;
+    line-height: normal;
+    transform: none;
   }
 }
 </style>
