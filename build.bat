@@ -44,31 +44,56 @@ if not exist "frontend\dist" (
     exit /b 1
 )
 
-:: Activate virtual environment
-echo [INFO] Activating virtual environment...
-if exist ".venv\Scripts\activate.bat" (
-    call .venv\Scripts\activate.bat
-) else if exist "venv\Scripts\activate.bat" (
-    call venv\Scripts\activate.bat
-) else (
-    echo [WARNING] Virtual environment not found, using system Python
+:: Check Python
+where python >nul 2>&1
+if errorlevel 1 (
+    echo [ERROR] Python not found!
+    echo Please install Python 3.11+ from https://python.org/
+    exit /b 1
 )
 
-:: Verify Python path
+for /f "tokens=*" %%a in ('python --version') do (
+    echo [INFO] Found %%a
+)
+
+:: Create virtual environment if not exists
+echo [INFO] Setting up virtual environment...
+if not exist ".venv" (
+    echo [INFO] Creating virtual environment...
+    python -m venv .venv
+    if errorlevel 1 (
+        echo [ERROR] Failed to create virtual environment!
+        exit /b 1
+    )
+)
+
+:: Activate virtual environment
+call .venv\Scripts\activate.bat
+if errorlevel 1 (
+    echo [ERROR] Failed to activate virtual environment!
+    exit /b 1
+)
+
 for /f "tokens=*" %%a in ('where python') do (
     echo [INFO] Using Python: %%a
-    goto :python_done
-)
-:python_done
-
-:: Install PyInstaller if not exists
-python -m pip show pyinstaller >nul 2>&1
-if errorlevel 1 (
-    echo [INFO] Installing PyInstaller...
-    python -m pip install pyinstaller
 )
 
+:: Install/Upgrade pip
+echo [INFO] Upgrading pip...
+python -m pip install --upgrade pip >nul 2>&1
+
+:: Install backend dependencies
+echo [INFO] Installing backend dependencies...
 cd backend
+python -m pip install -r requirements.txt
+if errorlevel 1 (
+    echo [ERROR] Failed to install backend dependencies!
+    exit /b 1
+)
+
+:: Install PyInstaller
+echo [INFO] Installing PyInstaller...
+python -m pip install pyinstaller >nul 2>&1
 
 :: Clean previous build
 echo [INFO] Cleaning previous build...
