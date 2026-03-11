@@ -52,8 +52,8 @@ pip install -r requirements.txt
 复制配置文件模板并编辑：
 
 ```bash
-copy .env .env.local
-notepad .env.local
+copy .env.template .env
+notepad .env
 ```
 
 修改以下配置项：
@@ -61,10 +61,11 @@ notepad .env.local
 > **注意**：如果不配置 `GAME_MODS_DIRECTORY`，程序会尝试从 Steam 注册表自动检测路径。
 
 ```env
-# 可选：你的游戏 mods 文件夹路径
+# 你的游戏 mods 文件夹路径
 GAME_MODS_DIRECTORY='C:\Program Files (x86)\Steam\steamapps\common\Hatsune Miku Project DIVA Mega Mix Plus\mods'
 
-# 可选：服务器端口（默认8000）
+# 服务器主机和端口
+HOST=0.0.0.0
 PORT=8000
 ```
 
