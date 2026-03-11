@@ -49,11 +49,10 @@ pip install -r requirements.txt
 
 ### 3. 配置 Mods 目录
 
-复制配置文件模板并编辑：
+编辑配置文件：
 
 ```bash
-copy .env .env.local
-notepad .env.local
+notepad .env
 ```
 
 修改以下配置项：
