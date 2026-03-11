@@ -62,10 +62,10 @@ for /f "tokens=*" %%a in ('where python') do (
 :python_done
 
 :: Install PyInstaller if not exists
-pip show pyinstaller >nul 2>&1
+python -m pip show pyinstaller >nul 2>&1
 if errorlevel 1 (
     echo [INFO] Installing PyInstaller...
-    pip install pyinstaller
+    python -m pip install pyinstaller
 )
 
 cd backend
@@ -77,7 +77,7 @@ rmdir /s /q dist 2>nul
 
 :: Run PyInstaller
 echo [INFO] Building executable...
-pyinstaller build.spec
+python -m PyInstaller build.spec
 
 if errorlevel 1 (
     echo [ERROR] Build failed!
@@ -118,5 +118,9 @@ echo 1. Edit backend/dist/QuantumSwitch/config/.env.template
 echo 2. Rename it to .env
 echo 3. Set your GAME_MODS_DIRECTORY path
 echo 4. Run QuantumSwitch.exe
+echo.
+echo NOTE: If QR code displays incorrectly in console,
+echo       right-click the title bar -^> Properties -^> Font,
+echo       and select a font like "Consolas".
 echo.
 pause

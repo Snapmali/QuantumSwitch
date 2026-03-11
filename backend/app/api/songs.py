@@ -1,5 +1,4 @@
 """Song-related API endpoints."""
-import traceback
 from typing import Optional
 from fastapi import APIRouter, HTTPException, Query
 from ..models import (

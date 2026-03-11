@@ -6,12 +6,12 @@
 
 </div>
 
-Quantum Switch 是一个用于 Hatsune Miku: Project DIVA Mega Mix+ 的网页版歌曲切换工具，让你可以通过浏览器快速选择并跳转到游戏中的任意歌曲。
+Quantum Switch 是一个用于 Hatsune Miku: Project DIVA Mega Mix+ 的网页版歌曲切换工具，可以通过浏览器快速选择并跳转到游戏中的任意歌曲。
 
 ## 特别感谢
 
-- 感谢 sasnchis 的 [DivaSongViewer](https://github.com/sasnchis/DivaSongViewer/tree/master) 项目，本项目中歌曲切换核心逻辑、mod_pv_db 解析逻辑大量参考 DivaSongViewer 开源项目，感谢他对相关内存地址的研究
-- 感谢 [hiki8man](https://gamebanana.com/members/2176530) 原版歌曲 mod_pv_db，以及对切歌逻辑的讲解，对理解相关流程提供了很大帮助
+- 感谢 hiki8man 的 [Select Song with PVID](https://gamebanana.com/tools/21051) 项目、原版歌曲 mod_pv_db，以及对切歌逻辑的讲解，对理解相关流程提供了很大帮助
+- 感谢 sasnchis 的 [DivaSongViewer](https://gamebanana.com/tools/18296) 项目，本项目中歌曲切换核心逻辑、mod_pv_db 解析逻辑大量参考 DivaSongViewer 开源项目
 - Project DIVA Mega Mix+ 社区，GameBanana 的 [mod_pv_db 结构说明](https://gamebanana.com/tuts/15681#H1_13)
 - 各路 AI，没这个办不成事
 
@@ -34,7 +34,7 @@ Quantum Switch 是一个用于 Hatsune Miku: Project DIVA Mega Mix+ 的网页版
 ### 1. 获取代码
 
 ```bash
-git clone <仓库地址>
+git clone https://github.com/Snapmali/QuantumSwitch.git
 cd QuantumSwitch
 ```
 
