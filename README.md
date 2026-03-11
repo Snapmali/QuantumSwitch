@@ -52,8 +52,8 @@ pip install -r requirements.txt
 复制配置文件模板并编辑：
 
 ```bash
-copy .env.template .env
-notepad .env
+copy .env .env.local
+notepad .env.local
 ```
 
 修改以下配置项：
