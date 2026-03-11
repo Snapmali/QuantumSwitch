@@ -217,8 +217,8 @@ const handleSearch = async (query: string) => {
 
 .content-grid {
   display: grid;
-  grid-template-columns: 460px 1fr;
-  gap: 24px;
+  grid-template-columns: 400px 1fr;
+  gap: 20px;
   max-width: 1400px;
   margin: 0 auto;
   height: calc(100vh - 108px);

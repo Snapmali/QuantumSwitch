@@ -1,17 +1,78 @@
 """Main FastAPI application entry point."""
+import socket
 import sys
-import os
 from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
 
-from .config import settings, IS_FROZEN, WORK_DIR
 from .api import songs, game, system
+from .config import settings, IS_FROZEN
 from .utils.logger import logger
+
+
+def get_local_ip() -> str:
+    """Get the local IP address for LAN access."""
+    try:
+        # Create a socket to connect to an external address
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.settimeout(0)
+        try:
+            # Try to connect to a public DNS server (doesn't actually send data)
+            s.connect(('8.8.8.8', 1))
+            ip = s.getsockname()[0]
+        except Exception:
+            ip = '127.0.0.1'
+        finally:
+            s.close()
+        return ip
+    except Exception:
+        return '127.0.0.1'
+
+
+def print_qr_code(url: str) -> None:
+    """Print QR code to console for easy mobile access."""
+    try:
+        import qrcode
+        from io import StringIO
+
+        qr = qrcode.QRCode(
+            version=1,
+            error_correction=qrcode.constants.ERROR_CORRECT_L,
+            box_size=1,
+            border=1,
+        )
+        qr.add_data(url)
+        qr.make(fit=True)
+
+        # Generate ASCII QR code
+        buffer = StringIO()
+        qr.print_ascii(out=buffer, invert=True)
+        buffer.seek(0)
+        qr_text = buffer.read()
+
+        print("\n" + "=" * 50)
+        print("  Scan QR code to access from mobile device:")
+        print("=" * 50)
+        print(qr_text)
+        print(f"  URL: {url}")
+        print("=" * 50 + "\n")
+    except Exception as e:
+        logger.warning(f"Failed to generate QR code: {e}")
+        print(f"\n  Access URL: {url}\n")
+
+
+def show_access_info():
+    """Show LAN access URL and QR code after startup."""
+    if settings.HOST == '0.0.0.0':
+        local_ip = get_local_ip()
+        lan_url = f"http://{local_ip}:{settings.PORT}"
+        print_qr_code(lan_url)
+    else:
+        print(f"\n  Server running at: http://{settings.HOST}:{settings.PORT}\n")
 
 
 @asynccontextmanager
@@ -26,6 +87,9 @@ async def lifespan(app: FastAPI):
     # Load songs cache on startup
     from .api.songs import load_songs_cache
     load_songs_cache()
+
+    # Show access info after all resources loaded
+    show_access_info()
 
     yield
 

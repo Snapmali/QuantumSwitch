@@ -397,6 +397,59 @@ const hasCredits = computed(() => {
   gap: 6px;
 }
 
+/* Wide screen optimizations (1024px and above) */
+@media (min-width: 1025px) {
+  .difficulty-card {
+    min-width: 120px;
+    max-width: 160px;
+  }
+
+  .difficulty-content {
+    padding: 0 10px;
+    gap: 8px;
+  }
+
+  .difficulty-badge {
+    width: 28px;
+    height: 28px;
+    font-size: 11px;
+  }
+
+  .difficulty-name {
+    font-size: 12px;
+  }
+
+  .song-header {
+    height: auto;
+    min-height: 80px;
+  }
+
+  .song-icon {
+    width: 56px;
+    height: 56px;
+  }
+
+  .song-name {
+    font-size: 16px;
+  }
+
+  .metadata-grid {
+    gap: 8px;
+  }
+
+  .metadata-item {
+    padding: 6px 10px;
+  }
+
+  .mod-item {
+    padding: 10px;
+  }
+
+  .song-detail {
+    padding: 16px;
+  }
+}
+
 .section-title .el-icon {
   font-size: 16px;
   color: var(--el-color-primary);
@@ -704,6 +757,15 @@ const hasCredits = computed(() => {
   font-weight: 500;
 }
 
+.attributes-collapse :deep(.el-collapse-item__content) {
+  padding: 12px;
+  overflow: visible;
+}
+
+.attributes-collapse :deep(.el-collapse-item__wrap) {
+  overflow: visible;
+}
+
 .attributes-list {
   display: flex;
   flex-direction: column;
@@ -867,26 +929,39 @@ const hasCredits = computed(() => {
   }
 
   .attributes-list {
-    max-height: 250px;
+    max-height: none;
+    overflow-y: visible;
   }
 
   .attribute-item {
     flex-direction: column;
-    gap: 4px;
+    gap: 6px;
+    align-items: flex-start;
+    padding: 10px 12px;
+    overflow: visible;
+    min-height: auto;
   }
 
   .attribute-key {
     max-width: 100%;
+    white-space: normal;
+    word-break: break-all;
   }
 
   .attribute-value {
     text-align: left;
+    width: 100%;
     word-break: break-all;
   }
 }
 
 /* Small mobile optimizations */
 @media (max-width: 480px) {
+  .attributes-list {
+    max-height: none;
+    overflow-y: visible;
+  }
+
   .song-detail {
     padding: 12px;
     max-width: 100%;
@@ -1022,19 +1097,27 @@ const hasCredits = computed(() => {
 
   .attribute-item {
     flex-direction: column;
-    gap: 4px;
-    padding: 8px 10px;
+    gap: 6px;
+    padding: 10px 12px;
+    align-items: flex-start;
+    overflow: visible;
   }
 
   .attribute-key {
     max-width: 100%;
     word-break: break-all;
+    white-space: normal;
+    font-size: 11px;
+    color: #8c959f;
   }
 
   .attribute-value {
     text-align: left;
     word-break: break-all;
     max-width: 100%;
+    font-size: 13px;
+    color: #24292f;
+    width: 100%;
   }
 
   .section-title {

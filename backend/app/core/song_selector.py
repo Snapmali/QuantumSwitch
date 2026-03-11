@@ -103,7 +103,7 @@ class SongSelector:
         if success:
             message = f"Successfully switched to '{song.name}' ({actual_difficulty.display_name})"
             if mode == SwitchMode.DELAYED:
-                message += " (delayed update - press SPACE to apply)"
+                message += " (delayed update - enter song selection ment to apply)"
         else:
             message = "Failed to switch song"
 
