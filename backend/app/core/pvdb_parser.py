@@ -141,7 +141,7 @@ class PvdbParser:
                         # Create vanilla mod info with id=0
                         vanilla_mod_info = ModInfo(
                             id=0,  # 原版 ID 为 0
-                            name="Vanilla",
+                            name="Vanilla charts",
                             path=None,
                             enabled=True,  # 原版始终启用
                             author=None,

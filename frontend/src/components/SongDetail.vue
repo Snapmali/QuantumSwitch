@@ -149,18 +149,17 @@ const hasCredits = computed(() => {
           </div>
         </div>
         <div class="song-favorite">
-          <el-button
-            circle
-            :type="isFavorite ? 'warning' : 'default'"
-            size="small"
+          <span
+            class="favorite-star"
+            :class="{ 'is-favorite': isFavorite }"
             @click="handleToggleFavorite"
             :title="isFavorite ? '取消收藏' : '添加收藏'"
           >
-            <el-icon :size="18">
+            <el-icon :size="20">
               <StarFilled v-if="isFavorite" />
               <Star v-else />
             </el-icon>
-          </el-button>
+          </span>
         </div>
       </div>
 
@@ -295,8 +294,7 @@ const hasCredits = computed(() => {
           <el-icon>
             <folder />
           </el-icon>
-          来源 Mod
-          <el-tag v-if="song.isVanilla" type="primary" size="small" effect="light" class="vanilla-badge" :disable-transitions="true">原版</el-tag>
+          相关来源
         </h3>
 
         <!-- Multiple Mods List -->
@@ -305,14 +303,15 @@ const hasCredits = computed(() => {
             v-for="(mod, index) in song.modInfos"
             :key="mod.path || index"
             class="mod-item"
-            :class="{ 'mod-disabled': !mod.enabled }"
+            :class="{ 'mod-disabled': !mod.enabled, 'mod-id-zero': mod.id === 0 }"
           >
             <div class="mod-header">
               <span class="mod-index">#{{ index + 1 }}</span>
               <span class="mod-name">{{ mod.name }}</span>
-              <el-tag :type="mod.enabled ? 'success' : 'info'" size="small" :disable-transitions="true">
+              <el-tag v-if="mod.id !== 0" :type="mod.enabled ? 'success' : 'info'" size="small" :disable-transitions="true">
                 {{ mod.enabled ? '已启用' : '已禁用' }}
               </el-tag>
+              <el-tag v-else type="primary" size="small" effect="plain" :disable-transitions="true">原版</el-tag>
             </div>
             <div v-if="mod.author || mod.version" class="mod-meta">
               <span v-if="mod.author" class="mod-author">
@@ -400,12 +399,28 @@ const hasCredits = computed(() => {
   align-items: center;
 }
 
-.song-favorite .el-button {
+.favorite-star {
+  cursor: pointer;
+  padding: 6px;
+  border-radius: 50%;
   transition: all 0.2s;
+  color: var(--el-text-color-secondary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
-.song-favorite .el-button:hover {
-  transform: scale(1.1);
+.favorite-star:hover {
+  background-color: var(--el-fill-color);
+  color: var(--el-color-warning);
+}
+
+.favorite-star.is-favorite {
+  color: #ffc107;
+}
+
+.favorite-star.is-favorite:hover {
+  color: #ff9800;
 }
 
 .song-name {
@@ -679,6 +694,8 @@ const hasCredits = computed(() => {
   font-size: 13px;
   color: #24292f;
   font-weight: 500;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+  -webkit-font-smoothing: antialiased;
 }
 
 /* Mod Section */
@@ -764,6 +781,30 @@ const hasCredits = computed(() => {
 .mod-item.mod-disabled {
   border-left-color: #8c959f;
   opacity: 0.8;
+}
+
+.mod-item.mod-id-zero {
+  background: #ecf5ff;
+  border-left-color: transparent;
+}
+
+.mod-item.mod-id-zero .mod-header {
+  margin-bottom: 0;
+}
+
+.mod-item.mod-id-zero .mod-index {
+  color: #409eff;
+  font-weight: 600;
+}
+
+.mod-item.mod-id-zero .mod-name {
+  color: #409eff;
+}
+
+.mod-item.mod-id-zero.mod-disabled {
+  border-left-color: #c0c4cc;
+  background: #f5f7fa;
+  box-shadow: none;
 }
 
 .mod-header {
