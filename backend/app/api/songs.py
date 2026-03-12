@@ -7,6 +7,7 @@ from ..models import (
     ApiResponse,
 )
 from ..core.bootstrap import get_pvdb_parser
+from ..core.favorites_manager import get_favorites_manager
 from ..utils.logger import logger
 
 router = APIRouter(prefix="/songs", tags=["songs"])
@@ -22,7 +23,8 @@ def load_songs_cache() -> list[SongResponse]:
     try:
         parser = get_pvdb_parser()
         songs = parser.scan_and_parse()
-        _cached_songs = [SongResponse.from_song(song) for song in songs]
+        favorites = get_favorites_manager().get_all_favorites()
+        _cached_songs = [SongResponse.from_song(song, favorites) for song in songs]
         _cache_loaded = True
         logger.info(f"Songs cache loaded: {len(_cached_songs)} songs")
         return _cached_songs
@@ -40,15 +42,32 @@ def get_cached_songs() -> list[SongResponse]:
     return _cached_songs
 
 
+def get_songs_with_favorites() -> list[SongResponse]:
+    """Get cached songs with current favorites applied."""
+    global _cached_songs
+    if not _cache_loaded:
+        return load_songs_cache()
+    # Refresh favorites status
+    favorites = get_favorites_manager().get_all_favorites()
+    for song in _cached_songs:
+        song.isFavorite = song.id in favorites
+    return _cached_songs
+
+
 @router.get("", response_model=ApiResponse[SongListResponse])
-async def get_all_songs(
+async def get_songs(
     page: int = Query(1, ge=1, description="Page number"),
     page_size: int = Query(20, ge=1, le=100, description="Items per page", alias="pageSize"),
     search: Optional[str] = Query(None, description="Search query"),
+    favorites: bool = Query(False, description="Filter to show only favorites"),
 ):
     """Get paginated songs from cache."""
     try:
-        songs = get_cached_songs()
+        songs = get_songs_with_favorites()
+
+        # Filter by favorites if requested
+        if favorites:
+            songs = [s for s in songs if s.isFavorite]
 
         # Filter by search if provided
         if search:
@@ -111,52 +130,18 @@ async def reload_songs():
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.get("/search", response_model=ApiResponse[SongListResponse])
-async def search_songs(
-    q: str = Query(..., description="Search query"),
-    difficulty: Optional[int] = Query(None, description="Filter by difficulty (0-5)"),
-    page: int = Query(1, ge=1, description="Page number"),
-    page_size: int = Query(20, ge=1, le=100, description="Items per page", alias="pageSize"),
-):
-    """Search songs by name or PV ID with pagination."""
+@router.get("/favorites", response_model=ApiResponse[list[int]])
+async def get_favorites():
+    """Get all favorite song IDs."""
     try:
-        songs = get_cached_songs()
-        results = []
-        query_lower = q.lower()
-
-        for song in songs:
-            # Search by ID
-            if q.isdigit() and song.id == int(q):
-                results.append(song)
-                continue
-
-            # Search by name
-            if query_lower in song.name.lower():
-                if difficulty is not None:
-                    if any(d.type == difficulty for d in song.difficultyDetails):
-                        results.append(song)
-                else:
-                    results.append(song)
-
-        total = len(results)
-
-        # Pagination
-        start = (page - 1) * page_size
-        end = start + page_size
-        paginated_results = results[start:end]
-
+        manager = get_favorites_manager()
+        favorites = manager.get_all_favorites()
         return ApiResponse(
             success=True,
-            data=SongListResponse(
-                songs=paginated_results,
-                total=total,
-                page=page,
-                pageSize=page_size,
-                totalPages=(total + page_size - 1) // page_size
-            )
+            data=sorted(list(favorites))
         )
     except Exception as e:
-        logger.error(f"Failed to search songs: {e}")
+        logger.error(f"Failed to get favorites: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -164,7 +149,7 @@ async def search_songs(
 async def get_song(song_id: int):
     """Get a specific song by ID."""
     try:
-        songs = get_cached_songs()
+        songs = get_songs_with_favorites()  # 使用带收藏状态的函数
         song = next((s for s in songs if s.id == song_id), None)
         if song is None:
             raise HTTPException(status_code=404, detail=f"Song with ID {song_id} not found")
@@ -176,4 +161,19 @@ async def get_song(song_id: int):
         raise
     except Exception as e:
         logger.error(f"Failed to get song {song_id}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/{song_id}/favorite", response_model=ApiResponse[dict])
+async def toggle_favorite(song_id: int):
+    """Toggle favorite status for a song."""
+    try:
+        manager = get_favorites_manager()
+        is_favorite = manager.toggle_favorite(song_id)
+        return ApiResponse(
+            success=True,
+            data={"isFavorite": is_favorite}
+        )
+    except Exception as e:
+        logger.error(f"Failed to toggle favorite for song {song_id}: {e}")
         raise HTTPException(status_code=500, detail=str(e))

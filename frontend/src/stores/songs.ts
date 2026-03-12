@@ -21,6 +21,13 @@ export const useSongStore = defineStore('songs', () => {
 
   // Filter state (for server-side filtering)
   const searchQuery = ref('')
+  const favoritesOnly = ref(false)
+
+  // Favorites state - 当前列表页的歌曲收藏状态
+  const favorites = ref<Set<number>>(new Set())
+
+  // 选中歌曲的收藏状态 - 独立缓存，不随列表刷新而丢失
+  const selectedSongFavorite = ref<boolean>(false)
 
   // Client-side filter options (for local filtering if needed)
   const filterOptions = ref<FilterOptions>({
@@ -29,6 +36,7 @@ export const useSongStore = defineStore('songs', () => {
     hiddenOnly: false,
     sortBy: 'pvId',
     sortOrder: 'asc',
+    favoritesOnly: false,
   })
 
   // Getters
@@ -43,15 +51,30 @@ export const useSongStore = defineStore('songs', () => {
     return songs.value.find(song => song.id === pvId)
   })
 
+  const isFavorite = computed(() => (songId: number) => {
+    // 如果是当前选中歌曲，优先使用独立的缓存
+    if (songId === selectedId.value) {
+      return selectedSongFavorite.value
+    }
+    // 否则从列表缓存中查询
+    return favorites.value.has(songId)
+  })
+
   // Actions
-  async function loadSongs(page: number = 1, query: string = '') {
+  async function loadSongs(page: number = 1, query: string = '', resetFavorites: boolean = false) {
     loading.value = true
     error.value = null
     try {
-      const response = await songApi.getAll({
+      // 列表刷新时清空 favorites
+      if (resetFavorites) {
+        favorites.value.clear()
+      }
+
+      const response = await songApi.getSongs({
         page,
         pageSize: pageSize.value,
         search: query || undefined,
+        favorites: favoritesOnly.value,
       })
 
       const data: SongListResponse = response.data.data
@@ -59,6 +82,19 @@ export const useSongStore = defineStore('songs', () => {
       total.value = data.total || 0
       currentPage.value = data.page || page
       totalPages.value = data.totalPages || 1
+
+      // Update favorites set from song data (merge, don't replace)
+      data.songs?.forEach(song => {
+        if (song.isFavorite) {
+          favorites.value.add(song.id)
+        } else {
+          favorites.value.delete(song.id)
+        }
+        // 如果选中歌曲在新列表中，同步更新其收藏状态
+        if (song.id === selectedId.value) {
+          selectedSongFavorite.value = song.isFavorite || false
+        }
+      })
     } catch (err) {
       error.value = err instanceof Error ? err.message : 'Failed to load songs'
       songs.value = []
@@ -78,6 +114,15 @@ export const useSongStore = defineStore('songs', () => {
       total.value = data.total || 0
       currentPage.value = 1
       totalPages.value = data.totalPages || 1
+
+      // 清空并重新加载 favorites
+      favorites.value.clear()
+      data.songs?.forEach(song => {
+        if (song.isFavorite) {
+          favorites.value.add(song.id)
+        }
+      })
+
       ElMessage.success(`歌曲列表已刷新，共 ${data.total} 首歌曲`)
     } catch (err) {
       error.value = err instanceof Error ? err.message : 'Failed to reload songs'
@@ -88,19 +133,19 @@ export const useSongStore = defineStore('songs', () => {
   }
 
   async function changePage(page: number) {
-    await loadSongs(page, searchQuery.value)
+    await loadSongs(page, searchQuery.value, true)
   }
 
   async function changePageSize(size: number) {
     pageSize.value = size
     currentPage.value = 1
-    await loadSongs(1, searchQuery.value)
+    await loadSongs(1, searchQuery.value, true)
   }
 
   async function searchSongs(query: string) {
     searchQuery.value = query
     currentPage.value = 1
-    await loadSongs(1, query)
+    await loadSongs(1, query, true) // 搜索时清空 favorites
   }
 
   function setDifficultyFilter(difficulties: DifficultyType[]) {
@@ -119,10 +164,59 @@ export const useSongStore = defineStore('songs', () => {
     filterOptions.value.sortOrder = sortOrder
   }
 
-  function selectSong(id: number) {
-    selectedId.value = id
+  function setFavoritesOnly(value: boolean) {
+    favoritesOnly.value = value
+    filterOptions.value.favoritesOnly = value
+    currentPage.value = 1
+    loadSongs(1, searchQuery.value, true) // 切换收藏筛选时清空 favorites
+  }
+
+  async function loadFavorites() {
+    try {
+      const response = await songApi.getFavorites()
+      const favoriteIds = response.data.data || []
+      favorites.value = new Set(favoriteIds)
+    } catch (err) {
+      console.error('Failed to load favorites:', err)
+    }
+  }
+
+  async function toggleFavorite(songId: number) {
+    try {
+      const response = await songApi.toggleFavorite(songId)
+      const isFav = response.data.data.isFavorite
+
+      if (isFav) {
+        favorites.value.add(songId)
+      } else {
+        favorites.value.delete(songId)
+      }
+
+      // Update song in current list if present
+      const song = songs.value.find(s => s.id === songId)
+      if (song) {
+        song.isFavorite = isFav
+      }
+
+      // 如果是当前选中歌曲，同步更新独立缓存
+      if (songId === selectedId.value) {
+        selectedSongFavorite.value = isFav
+      }
+
+      return isFav
+    } catch (err) {
+      const errorMsg = err instanceof Error ? err.message : 'Failed to toggle favorite'
+      ElMessage.error(errorMsg)
+      return null
+    }
+  }
+
+  async function selectSong(song: Song) {
+    selectedId.value = song.id
     // 选择新歌曲时重置难度选择
     selectedDifficulty.value = null
+    // 直接使用列表中的歌曲数据，只需要单独获取收藏状态
+    selectedSongFavorite.value = song.isFavorite || false
   }
 
   function selectDifficulty(difficulty: string) {
@@ -186,11 +280,14 @@ export const useSongStore = defineStore('songs', () => {
     totalPages,
     searchQuery,
     filterOptions,
+    favorites,
+    favoritesOnly,
     // Getters
     allSongs,
     hasSongs,
     songById,
     songByPvId,
+    isFavorite,
     // Actions
     loadSongs,
     reloadSongs,
@@ -201,6 +298,9 @@ export const useSongStore = defineStore('songs', () => {
     setHiddenOnly,
     setSortBy,
     setSortOrder,
+    setFavoritesOnly,
+    loadFavorites,
+    toggleFavorite,
     selectSong,
     selectDifficulty,
     switchToCurrentSong,

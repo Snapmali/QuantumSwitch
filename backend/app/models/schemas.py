@@ -18,14 +18,17 @@ class DifficultyDetail(BaseModel):
     isOriginal: bool = False
     isSlide: bool = False
     index: int = 0
+    modIds: List[int] = []   # 来源 Mod ID 列表
+    enabled: bool = True     # 难度是否可用
 
 
 class ModInfoResponse(BaseModel):
     """Response schema for Mod information."""
     model_config = ConfigDict(populate_by_name=True)
 
+    id: int
     name: str
-    path: str
+    path: Optional[str]
     enabled: bool
     author: Optional[str] = None
     version: Optional[str] = None
@@ -36,7 +39,6 @@ class SongResponse(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
 
     id: int
-    sortId: int
     name: str  # 日文原名
     nameEn: Optional[str] = None
     nameReading: Optional[str] = None
@@ -60,16 +62,28 @@ class SongResponse(BaseModel):
     manipulator: Optional[str] = None  # 调教师
     pvEditor: Optional[str] = None  # PV编辑
 
+    isFavorite: bool = False  # 是否已收藏
+
     @classmethod
-    def from_song(cls, song) -> "SongResponse":
+    def from_song(cls, song, favorites: set[int] | None = None) -> "SongResponse":
         """Create SongResponse from a Song dataclass."""
-        return cls(
-            id=song.id,
-            sortId=song.sort_id,
-            name=song.name,
-            nameEn=song.name_en,
-            nameReading=song.name_reading,
-            difficultyDetails=[
+        # Build Mod enabled status lookup table: mod_id -> is_enabled
+        mod_enabled_map = {m.id: m.enabled for m in song.mod_infos}
+
+        # Build difficulty details with enabled status
+        difficulty_details = []
+        for d in song.difficulty_details:
+            # Original difficulty is always enabled
+            if d.is_original:
+                is_difficulty_enabled = True
+            else:
+                # Check if any mod providing this difficulty is enabled
+                is_difficulty_enabled = any(
+                    mod_enabled_map.get(mod_id, False)
+                    for mod_id in d.mod_ids
+                ) if d.mod_ids else song.is_vanilla
+
+            difficulty_details.append(
                 DifficultyDetail(
                     type=d.type.value,
                     name=d.type.display_name,
@@ -80,12 +94,21 @@ class SongResponse(BaseModel):
                     isOriginal=d.is_original,
                     isSlide=d.is_slide,
                     index=d.index,
+                    modIds=list(d.mod_ids),  # set 转 list
+                    enabled=is_difficulty_enabled,
                 )
-                for d in song.difficulty_details
-            ],
+            )
+
+        return cls(
+            id=song.id,
+            name=song.name,
+            nameEn=song.name_en,
+            nameReading=song.name_reading,
+            difficultyDetails=difficulty_details,
             hidden=song.hidden,
             modPath=song.mod_path,
             modInfo=ModInfoResponse(
+                id=song.mod_info.id,
                 name=song.mod_info.name,
                 path=song.mod_info.path,
                 enabled=song.mod_info.enabled,
@@ -94,6 +117,7 @@ class SongResponse(BaseModel):
             ) if song.mod_info else None,
             modInfos=[
                 ModInfoResponse(
+                    id=m.id,
                     name=m.name,
                     path=m.path,
                     enabled=m.enabled,
@@ -116,6 +140,7 @@ class SongResponse(BaseModel):
             illustrator=song.illustrator,
             manipulator=song.manipulator,
             pvEditor=song.pv_editor,
+            isFavorite=song.id in favorites if favorites else False,
         )
 
 

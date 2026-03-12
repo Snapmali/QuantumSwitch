@@ -62,8 +62,8 @@ onUnmounted(() => {
   gameStore.setAutoRefresh(false)
 })
 
-const handleSongSelect = (song: Song) => {
-  songStore.selectSong(song.id)
+const handleSongSelect = async (song: Song) => {
+  await songStore.selectSong(song)
   // 缓存选中的歌曲完整数据，翻页时不会丢失
   selectedSongData.value = song
 }
@@ -100,6 +100,20 @@ const handleSearch = async (query: string) => {
   currentPage.value = 1
   await songStore.searchSongs(query)
 }
+
+const handleToggleFavorite = async (songId: number) => {
+  await songStore.toggleFavorite(songId)
+}
+
+const handleToggleFavoriteDetail = async () => {
+  if (selectedSong.value) {
+    await songStore.toggleFavorite(selectedSong.value.id)
+  }
+}
+
+const handleFavoritesOnlyChange = (value: boolean) => {
+  songStore.setFavoritesOnly(value)
+}
 </script>
 
 <template>
@@ -135,10 +149,14 @@ const handleSearch = async (query: string) => {
               :total="songStore.total"
               :page="currentPage"
               :page-size="pageSize"
+              :favorites="songStore.favorites"
+              :favorites-only="songStore.favoritesOnly"
               @select="handleSongSelect"
               @page-change="handlePageChange"
               @refresh="handleRefreshSongs"
               @search="handleSearch"
+              @toggle-favorite="handleToggleFavorite"
+              @update:favorites-only="handleFavoritesOnlyChange"
             />
           </el-card>
         </div>
@@ -151,8 +169,10 @@ const handleSearch = async (query: string) => {
               :selected-difficulty="selectedDifficulty"
               :game-running="gameStore.isRunning"
               :is-mod-enabled="selectedSong?.modEnabled"
+              :is-favorite="selectedSong ? songStore.isFavorite(selectedSong.id) : false"
               @select-difficulty="handleDifficultySelect"
               @switch-song="handleSwitchSong"
+              @toggle-favorite="handleToggleFavoriteDetail"
             />
           </el-card>
         </div>

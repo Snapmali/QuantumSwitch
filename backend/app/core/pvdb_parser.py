@@ -30,6 +30,7 @@ class PvdbParser:
         self._songs: List[Song] = []
         self._song_map: Dict[int, Song] = {}
         self._hidden_songs: Set[int] = set()
+        self._mod_id_counter: int = 1  # 从 1 开始，原版使用 0
 
     @property
     def songs(self) -> List[Song]:
@@ -69,12 +70,6 @@ class PvdbParser:
 
         pvdb_files: List[tuple[Path, Optional[ModInfo], bool]] = []
 
-        # Scan mods directory for new Mod structure
-        if self.mods_directory and self.mods_directory.exists():
-            logger.info(f"Scanning mods directory: {self.mods_directory}")
-            for file_path, mod_info in self._scan_for_mods(self.mods_directory):
-                pvdb_files.append((file_path, mod_info, False))
-
         # Scan project data/vanilla directory (not in mods folder)
         # This is the vanilla folder in the project: backend/data/vanilla
         # In frozen mode, use DATA_DIR from config; in dev mode, use relative path
@@ -89,6 +84,12 @@ class PvdbParser:
             for file_path, mod_info in self._scan_for_mods(project_vanilla_dir, is_vanilla=True):
                 pvdb_files.append((file_path, mod_info, True))
 
+        # Scan mods directory for new Mod structure
+        if self.mods_directory and self.mods_directory.exists():
+            logger.info(f"Scanning mods directory: {self.mods_directory}")
+            for file_path, mod_info in self._scan_for_mods(self.mods_directory):
+                pvdb_files.append((file_path, mod_info, False))
+
         # Scan additional paths
         if additional_paths:
             for path in additional_paths:
@@ -96,6 +97,13 @@ class PvdbParser:
                     logger.info(f"Scanning additional path: {path}")
                     for file_path, mod_info in self._scan_for_mods(path):
                         pvdb_files.append((file_path, mod_info, False))
+
+        # Sort pvdb_files: vanilla (True) first, then by mod name, then by mod id
+        pvdb_files.sort(key=lambda x: (
+            not x[2],  # is_vanilla: True (0) comes before False (1)
+            x[1].name.lower() if x[1] else "",  # mod name (case-insensitive)
+            x[1].id if x[1] else 0  # mod id
+        ))
 
         # Parse each file with its associated Mod info and vanilla flag
         for file_path, mod_info, is_vanilla_file in pvdb_files:
@@ -130,7 +138,16 @@ class PvdbParser:
                 for file_path in files:
                     # Only include PVDB related files
                     if "pv_db" in file_path.name or "mdata_pv" in file_path.name:
-                        pvdb_files.append((file_path, None))
+                        # Create vanilla mod info with id=0
+                        vanilla_mod_info = ModInfo(
+                            id=0,  # 原版 ID 为 0
+                            name="Vanilla",
+                            path=None,
+                            enabled=True,  # 原版始终启用
+                            author=None,
+                            version=None
+                        )
+                        pvdb_files.append((file_path, vanilla_mod_info))
                         logger.info(f"Found vanilla PVDB file: {file_path}")
             return pvdb_files
 
@@ -201,11 +218,14 @@ class PvdbParser:
         if not config_path.exists():
             logger.warning(f"Mod config not found: {config_path}")
             # Return default ModInfo with directory name
-            return ModInfo(
+            mod_info = ModInfo(
+                id=self._mod_id_counter,
                 name=mod_path.name,
                 path=str(mod_path),
                 enabled=True
             )
+            self._mod_id_counter += 1
+            return mod_info
 
         try:
             with open(config_path, 'r', encoding='utf-8') as f:
@@ -220,21 +240,27 @@ class PvdbParser:
             author = mod_config.get('author')
             version = mod_config.get('version')
 
-            return ModInfo(
+            mod_info = ModInfo(
+                id=self._mod_id_counter,
                 name=name,
                 path=str(mod_path),
                 enabled=enabled,
                 author=author,
                 version=version
             )
+            self._mod_id_counter += 1
+            return mod_info
         except Exception as e:
             logger.error(f"Error loading Mod config from {config_path}: {e}")
             # Return default ModInfo with directory name
-            return ModInfo(
+            mod_info = ModInfo(
+                id=self._mod_id_counter,
                 name=mod_path.name,
                 path=str(mod_path),
                 enabled=True
             )
+            self._mod_id_counter += 1
+            return mod_info
 
     def _parse_file(self, file_path: Path, mod_info: Optional[ModInfo] = None, is_vanilla: bool = False) -> None:
         """Parse a single PVDB file.
@@ -330,7 +356,6 @@ class PvdbParser:
 
                 song = Song(
                     id=data['id'],
-                    sort_id=data.get('sort_id', data['id']),
                     name=name,
                     name_en=data.get('name_en'),
                     name_reading=data.get('name_reading'),
@@ -541,6 +566,10 @@ class PvdbParser:
 
         detail = data['difficulty_details'][diff_key]
 
+        # Record mod_id if available
+        if data.get('mod_info') and data['mod_info'].id is not None:
+            detail.mod_ids.add(data['mod_info'].id)
+
         if attr == 'level':
             detail.level = self._parse_level(value)
             # Don't add to difficulties list here - wait for script_file_name
@@ -622,6 +651,8 @@ class PvdbParser:
                     existing_detail.is_original = True
                 if detail.is_slide:
                     existing_detail.is_slide = True
+                # Merge mod_ids sets
+                existing_detail.mod_ids.update(detail.mod_ids)
             else:
                 existing.difficulty_details.append(detail)
 

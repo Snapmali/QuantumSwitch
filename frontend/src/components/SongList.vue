@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue'
 import type { Song } from '@/types'
-import { Search, Refresh } from '@element-plus/icons-vue'
+import { Search, Refresh, Star, StarFilled } from '@element-plus/icons-vue'
 import { debounce } from 'lodash-es'
 import { getDifficultyStyle, getDifficultyShortLabel } from '@/types'
 
@@ -12,6 +12,8 @@ const props = defineProps<{
   total?: number
   page?: number
   pageSize?: number
+  favorites?: Set<number>
+  favoritesOnly?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -19,6 +21,8 @@ const emit = defineEmits<{
   pageChange: [page: number]
   refresh: []
   search: [query: string]
+  toggleFavorite: [songId: number]
+  'update:favoritesOnly': [value: boolean]
 }>()
 
 const searchQuery = ref('')
@@ -29,6 +33,11 @@ const currentPage = computed({
     emit('pageChange', val)
     scrollToTop()
   }
+})
+
+const favoritesOnlyLocal = computed({
+  get: () => props.favoritesOnly || false,
+  set: (val) => emit('update:favoritesOnly', val)
 })
 
 // 滚动到列表顶部
@@ -81,6 +90,15 @@ const handleRefresh = () => {
   emit('refresh')
 }
 
+const handleToggleFavorite = (e: Event, songId: number) => {
+  e.stopPropagation()
+  emit('toggleFavorite', songId)
+}
+
+const isFavorite = (songId: number) => {
+  return props.favorites?.has(songId) || false
+}
+
 // Format level for display (handle decimals like 6.5)
 const formatLevel = (level: number): string => {
   if (level === 0) return ''
@@ -120,6 +138,19 @@ const formatLevel = (level: number): string => {
         title="刷新歌曲列表"
         @click="handleRefresh"
       />
+    </div>
+
+    <!-- Favorites Filter -->
+    <div class="favorites-filter">
+      <el-radio-group v-model="favoritesOnlyLocal" size="small">
+        <el-radio-button :value="false">
+          全部歌曲
+        </el-radio-button>
+        <el-radio-button :value="true">
+          <el-icon><StarFilled /></el-icon>
+          已收藏
+        </el-radio-button>
+      </el-radio-group>
     </div>
 
     <!-- Song List -->
@@ -164,6 +195,17 @@ const formatLevel = (level: number): string => {
               </span>
             </span>
           </el-tooltip>
+          <!-- Favorite Star -->
+          <span
+            class="favorite-star"
+            :class="{ 'is-favorite': isFavorite(song.id) }"
+            @click="(e) => handleToggleFavorite(e, song.id)"
+          >
+            <el-icon :size="16">
+              <StarFilled v-if="isFavorite(song.id)" />
+              <Star v-else />
+            </el-icon>
+          </span>
         </div>
       </div>
     </div>
@@ -210,6 +252,19 @@ const formatLevel = (level: number): string => {
 .difficulty-filter {
   width: 150px;
   min-width: 120px;
+}
+
+.favorites-filter {
+  padding: 8px 16px;
+  border-bottom: 1px solid var(--el-border-color-light);
+  display: flex;
+  justify-content: center;
+}
+
+.favorites-filter .el-radio-button__inner {
+  display: flex;
+  align-items: center;
+  gap: 4px;
 }
 
 .songs-container {
@@ -373,6 +428,28 @@ const formatLevel = (level: number): string => {
   font-size: 10px;
   opacity: 0.9;
   margin-left: 2px;
+}
+
+.favorite-star {
+  margin-left: auto;
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 4px;
+  transition: all 0.2s;
+  color: var(--el-text-color-secondary);
+}
+
+.favorite-star:hover {
+  background-color: var(--el-fill-color);
+  color: var(--el-color-warning);
+}
+
+.favorite-star.is-favorite {
+  color: #ffc107;
+}
+
+.favorite-star.is-favorite:hover {
+  color: #ff9800;
 }
 
 .empty-state {

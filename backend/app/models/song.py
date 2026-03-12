@@ -1,7 +1,7 @@
 """Song data models."""
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Optional
+from typing import Optional, Set
 
 from app.models.mod_info import ModInfo
 
@@ -53,6 +53,7 @@ class DifficultyInfo:
     is_original: bool = False  # 是否为原谱
     is_slide: bool = False  # 是否为滑动谱
     index: int = 0  # 同类型难度的索引，用于区分多个 EXTREME
+    mod_ids: Set[int] = field(default_factory=set)  # 来源 Mod ID 集合
 
 
 @dataclass
@@ -60,7 +61,6 @@ class Song:
     """Represents a Project DIVA song."""
 
     id: int
-    sort_id: int
     name: str  # 日文原名 (优先)
     name_en: Optional[str] = None  # 英文名称
     name_reading: Optional[str] = None  # 读音/假名
@@ -136,7 +136,6 @@ class Song:
         """Convert song to dictionary."""
         return {
             "id": self.id,
-            "sortId": self.sort_id,
             "name": self.name,  # 日文原名
             "nameEn": self.name_en,
             "nameReading": self.name_reading,
@@ -153,12 +152,14 @@ class Song:
                     "isOriginal": d.is_original,
                     "isSlide": d.is_slide,
                     "index": d.index,
+                    "modIds": list(d.mod_ids),  # set 转 list
                 }
                 for d in self.difficulty_details
             ],
             "hidden": self.hidden,
             "modPath": self.mod_path,
             "modInfo": {
+                "id": self.mod_info.id,
                 "name": self.mod_info.name,
                 "path": self.mod_info.path,
                 "enabled": self.mod_info.enabled,
@@ -167,6 +168,7 @@ class Song:
             } if self.mod_info else None,
             "modInfos": [
                 {
+                    "id": m.id,
                     "name": m.name,
                     "path": m.path,
                     "enabled": m.enabled,

@@ -104,12 +104,13 @@ export interface DifficultyDetail {
   isOriginal?: boolean  // 是否为原谱
   isSlide?: boolean  // 是否为滑动谱
   index?: number  // 同类型难度的索引
+  modIds?: number[]  // 来源 Mod ID 列表
+  enabled?: boolean  // 难度是否可用
 }
 
 // Song data structure
 export interface Song {
   id: number
-  sortId: number
   name: string  // Japanese name (priority)
   nameEn?: string
   nameReading?: string
@@ -123,6 +124,7 @@ export interface Song {
   bpm?: string
   description?: string
   attributes?: Record<string, string>
+  isFavorite?: boolean  // Whether this song is favorited
 
   // Song credits from songinfo
   music?: string        // 作曲家
@@ -136,6 +138,7 @@ export interface Song {
 
 // Mod information
 export interface ModInfo {
+  id: number        // Mod 唯一标识符
   name: string
   path: string
   enabled: boolean
@@ -221,4 +224,5 @@ export interface FilterOptions {
   hiddenOnly: boolean
   sortBy: 'id' | 'name' | 'pvId'
   sortOrder: 'asc' | 'desc'
+  favoritesOnly?: boolean  // 是否只显示收藏歌曲
 }

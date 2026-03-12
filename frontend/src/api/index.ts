@@ -38,20 +38,29 @@ api.interceptors.response.use(
 // Song API
 export const songApi = {
   // Get paginated songs
-  getAll: (params: { page?: number; pageSize?: number; search?: string }) => {
-    const { page = 1, pageSize = 20, search } = params
-    return api.get<ApiResponse<PaginatedResponse<Song>>>(`/songs?page=${page}&pageSize=${pageSize}${search ? `&search=${encodeURIComponent(search)}` : ''}`)
+  getSongs: (params: { page?: number; pageSize?: number; search?: string; favorites?: boolean }) => {
+    const { page = 1, pageSize = 20, search, favorites } = params
+    let url = `/songs?page=${page}&pageSize=${pageSize}`
+    if (search) {
+      url += `&search=${encodeURIComponent(search)}`
+    }
+    if (favorites) {
+      url += '&favorites=true'
+    }
+    return api.get<ApiResponse<PaginatedResponse<Song>>>(url)
   },
 
   // Get song by ID
   getById: (id: number) => api.get<ApiResponse<Song>>(`/songs/${id}`),
 
-  // Search songs with pagination
-  search: (query: string, page: number = 1, pageSize: number = 20, difficulty?: number) =>
-    api.get<ApiResponse<PaginatedResponse<Song>>>(`/songs/search?q=${encodeURIComponent(query)}&page=${page}&pageSize=${pageSize}${difficulty !== undefined ? `&difficulty=${difficulty}` : ''}`),
-
   // Reload songs from PVDB files
   reload: () => api.post<ApiResponse<PaginatedResponse<Song>>>('/songs/reload'),
+
+  // Toggle favorite status
+  toggleFavorite: (id: number) => api.post<ApiResponse<{ isFavorite: boolean }>>(`/songs/${id}/favorite`),
+
+  // Get all favorite song IDs
+  getFavorites: () => api.get<ApiResponse<number[]>>(`/songs/favorites`),
 }
 
 // Game API

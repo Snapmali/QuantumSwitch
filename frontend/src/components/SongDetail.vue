@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import type { Song } from '@/types'
 import { ref, computed } from 'vue'
-import {Check, Folder, InfoFilled, StarFilled, SwitchButton, UserFilled, VideoPlay, Collection} from "@element-plus/icons-vue"
+import {Check, Folder, InfoFilled, StarFilled, Star, SwitchButton, UserFilled, VideoPlay, Collection} from "@element-plus/icons-vue"
 import { formatLevel, getDifficultyLabel, getDifficultyShortLabel, DifficultyColorValues } from '@/types'
 
 const props = defineProps<{
@@ -9,11 +9,13 @@ const props = defineProps<{
   selectedDifficulty?: string | null
   gameRunning?: boolean
   isModEnabled?: boolean
+  isFavorite?: boolean
 }>()
 
 const emit = defineEmits<{
   selectDifficulty: [difficulty: string]
   switchSong: []
+  toggleFavorite: []
 }>()
 
 // 跟踪悬停的难度
@@ -24,6 +26,9 @@ const hoveredDifficulty = ref<string | null>(null)
 const switchButtonDisabled = computed(() => {
   if (!props.selectedDifficulty) return true
   if (!props.gameRunning) return true
+  // 检查选中的难度是否被禁用
+  const selectedDetail = props.song?.difficultyDetails.find(d => d.name === props.selectedDifficulty)
+  if (selectedDetail?.enabled === false) return true
   // 原版歌曲不检测mod启用状态
   if (props.song?.isVanilla) return false
   if (props.isModEnabled === false) return true
@@ -33,6 +38,9 @@ const switchButtonDisabled = computed(() => {
 const switchButtonHint = computed(() => {
   if (!props.selectedDifficulty) return '请先选择难度'
   if (!props.gameRunning) return '游戏未运行'
+  // 检查选中的难度是否被禁用
+  const selectedDetail = props.song?.difficultyDetails.find(d => d.name === props.selectedDifficulty)
+  if (selectedDetail?.enabled === false) return '该难度已被禁用'
   // 原版歌曲不显示mod禁用提示
   if (props.song?.isVanilla) return ''
   if (props.isModEnabled === false) return 'Mod 已禁用'
@@ -45,6 +53,10 @@ const handleSelectDifficulty = (difficultyType: string) => {
 
 const handleSwitch = () => {
   emit('switchSong')
+}
+
+const handleToggleFavorite = () => {
+  emit('toggleFavorite')
 }
 
 // Format attributes for display
@@ -66,9 +78,21 @@ const getDifficultyColor = (diffName: string): string => {
   return DifficultyColorValues[diffName] || '#909399'
 }
 
-// 获取难度卡片样式（根据选中状态和悬停状态返回不同样式）
-const getDifficultyCardStyle = (diffName: string, isSelected: boolean, isHovered: boolean): Record<string, string> => {
+// 获取难度卡片样式（根据选中状态、悬停状态和禁用状态返回不同样式）
+const getDifficultyCardStyle = (diffName: string, isSelected: boolean, isHovered: boolean, isDisabled: boolean): Record<string, string> => {
   const color = DifficultyColorValues[diffName] || '#909399'
+
+  if (isDisabled) {
+    // 禁用状态：灰色边框、降低透明度
+    return {
+      borderLeftColor: '#8c959f',
+      borderColor: '#d0d7de',
+      backgroundColor: '#f6f8fa',
+      opacity: '0.6',
+      cursor: 'not-allowed',
+    }
+  }
+
   if (isSelected) {
     // 选中状态：使用难度颜色的半透明背景，以及该颜色作为边框
     return {
@@ -122,8 +146,21 @@ const hasCredits = computed(() => {
           <div class="song-badges">
             <el-tag v-if="song.hidden" type="danger" size="small" effect="dark">隐藏</el-tag>
             <el-tag type="info" size="small">id {{ song.id }}</el-tag>
-            <el-tag v-if="song.sortId !== song.id" type="info" size="small">排序 {{ song.sortId }}</el-tag>
           </div>
+        </div>
+        <div class="song-favorite">
+          <el-button
+            circle
+            :type="isFavorite ? 'warning' : 'default'"
+            size="small"
+            @click="handleToggleFavorite"
+            :title="isFavorite ? '取消收藏' : '添加收藏'"
+          >
+            <el-icon :size="18">
+              <StarFilled v-if="isFavorite" />
+              <Star v-else />
+            </el-icon>
+          </el-button>
         </div>
       </div>
 
@@ -159,15 +196,18 @@ const hasCredits = computed(() => {
         </h3>
         <div class="difficulty-list">
           <div v-for="detail in song.difficultyDetails" :key="detail.type + '-' + detail.index"
-            :class="['difficulty-card', { selected: selectedDifficulty === detail.name }]"
-            :style="getDifficultyCardStyle(detail.name, selectedDifficulty === detail.name, hoveredDifficulty === detail.name)"
-            @click="handleSelectDifficulty(detail.name)"
+            :class="['difficulty-card', {
+              selected: selectedDifficulty === detail.name,
+              disabled: detail.enabled === false
+            }]"
+            :style="getDifficultyCardStyle(detail.name, selectedDifficulty === detail.name, hoveredDifficulty === detail.name, detail.enabled === false)"
+            @click="detail.enabled !== false ? handleSelectDifficulty(detail.name) : null"
             @mouseenter="hoveredDifficulty = detail.name"
             @mouseleave="hoveredDifficulty = null"
           >
             <div class="difficulty-content">
               <div class="difficulty-main">
-                <div class="difficulty-badge" :style="{ backgroundColor: getDifficultyColor(detail.name) }">{{ getDifficultyShortLabel(detail.name) }}</div>
+                <div class="difficulty-badge" :style="{ backgroundColor: detail.enabled === false ? '#8c959f' : getDifficultyColor(detail.name) }">{{ getDifficultyShortLabel(detail.name) }}</div>
                 <div class="difficulty-info">
                   <div class="difficulty-name">{{ getDifficultyLabel(detail.name) }}</div>
                   <div v-if="detail.level > 0" class="difficulty-level">
@@ -177,6 +217,10 @@ const hasCredits = computed(() => {
               </div>
               <div v-if="selectedDifficulty === detail.name" class="selected-icon" :style="{ color: getDifficultyColor(detail.name) }">
                 <el-icon><check /></el-icon>
+              </div>
+              <!-- 禁用标记 -->
+              <div v-if="detail.enabled === false" class="disabled-indicator">
+                <el-tag type="info" size="small" :disable-transitions="true">已禁用</el-tag>
               </div>
             </div>
           </div>
@@ -278,7 +322,7 @@ const hasCredits = computed(() => {
                 版本: {{ mod.version }}
               </span>
             </div>
-            <div v-if="mod.path" class="mod-path" :title="mod.path">
+            <div v-if="mod.path && mod.id !== 0" class="mod-path" :title="mod.path">
               <el-icon><folder /></el-icon> {{ mod.path }}
             </div>
           </div>
@@ -348,6 +392,20 @@ const hasCredits = computed(() => {
 .song-titles {
   flex: 1;
   min-width: 0;
+}
+
+.song-favorite {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+}
+
+.song-favorite .el-button {
+  transition: all 0.2s;
+}
+
+.song-favorite .el-button:hover {
+  transform: scale(1.1);
 }
 
 .song-name {
@@ -420,8 +478,8 @@ const hasCredits = computed(() => {
   }
 
   .song-header {
-    height: auto;
-    min-height: 80px;
+    height: 90px;
+    min-height: 90px;
   }
 
   .song-icon {
@@ -483,6 +541,11 @@ const hasCredits = computed(() => {
   background: #fff;
   position: relative;
   box-sizing: border-box;
+}
+
+.difficulty-card.disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
 }
 
 .difficulty-card:hover {
@@ -560,6 +623,12 @@ const hasCredits = computed(() => {
   color: #409eff;
   font-size: 16px;
   flex-shrink: 0;
+}
+
+.disabled-indicator {
+  position: absolute;
+  top: 4px;
+  right: 4px;
 }
 
 /* Rest of the styles */
@@ -666,8 +735,9 @@ const hasCredits = computed(() => {
   font-size: 12px;
   max-width: 100%;
   overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  word-break: break-all;
+  white-space: normal;
+  line-height: 1.4;
 }
 
 /* Vanilla Badge in Title */
@@ -723,8 +793,11 @@ const hasCredits = computed(() => {
   font-size: 11px;
   color: #8c959f;
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 4px;
+  word-break: break-all;
+  white-space: normal;
+  line-height: 1.4;
 }
 
 .mod-list .mod-path .el-icon {
@@ -829,8 +902,8 @@ const hasCredits = computed(() => {
   }
 
   .song-header {
-    height: auto;
-    min-height: 80px;
+    height: 90px;
+    min-height: 90px;
     gap: 12px;
   }
 
@@ -969,7 +1042,8 @@ const hasCredits = computed(() => {
   }
 
   .song-header {
-    min-height: 70px;
+    height: 90px;
+    min-height: 90px;
     gap: 10px;
   }
 
