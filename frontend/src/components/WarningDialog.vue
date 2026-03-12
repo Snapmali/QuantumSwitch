@@ -32,8 +32,7 @@ defineExpose({ open })
       <ul class="warning-list">
         <li>可能导致游戏崩溃或数据损坏</li>
         <li>可能导致存档损坏或丢失</li>
-        <li>可能触发游戏的反作弊机制</li>
-        <li>在线模式使用可能导致账号风险</li>
+        <li>可能触发游戏不存在的反作弊机制</li>
       </ul>
 
       <el-alert
@@ -45,8 +44,7 @@ defineExpose({ open })
         <ul class="confirm-list">
           <li>已备份重要存档</li>
           <li>了解并接受上述风险</li>
-          <li>仅在离线模式下使用</li>
-          <li>以管理员身份运行此工具</li>
+          <li>如有问题可尝试以管理员身份运行此工具</li>
         </ul>
       </el-alert>
     </div>
