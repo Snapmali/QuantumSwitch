@@ -36,6 +36,10 @@ class SongSelector:
     STATE_PV_SELECTION = 5
     STATE_SONG_SELECTION = 6
 
+    STATE_INGAME = 0
+    PVID_EMPTY_INGAME = 0xFFFFFFFF
+    PVID_EMPTY_SONG_SELECTION = 0xFFFFFFFE
+
     def __init__(self, memory_operator):
         self._mem = memory_operator
 
@@ -247,6 +251,63 @@ class SongSelector:
             logger.exception(f"Error during delayed switch: {e}")
             return False
 
-    def get_current_song(self) -> Tuple[Optional[int], Optional[int], Optional[int]]:
+    def get_current_selection(self) -> Tuple[Optional[int], Optional[bool]]:
+        """
+        Get the currently playing or selected song PVID.
+
+        Reads the game state to determine if player is in-game or in song selection,
+        then reads the appropriate memory address to get the current PVID.
+
+        Returns:
+            Tuple of (current_pvid, is_ingame):
+                - current_pvid: The current song PVID, or None if no song selected
+                - is_ingame: True if player is in-game (playing), False if in menu,
+                           None if cannot read memory
+        """
+        # Read game state to determine if player is in-game
+        curr_pvid_base_addr = self._mem.read_int(settings.CURR_PVID_BASE_PTR_ADDR, 8, signed=False, skip_eden=True)
+        if curr_pvid_base_addr is None:
+            logger.warning("Failed to read CURR_PVID_BASE_PTR_ADDR, game may not be running")
+            return None, None
+        logger.debug(f"Read CURR_PVID_BASE_PTR_ADDR 0x{settings.CURR_PVID_BASE_PTR_ADDR:08X} = "
+                    f"0x{curr_pvid_base_addr:08X} ({curr_pvid_base_addr})")
+
+        # Determine which memory address to read based on game state
+        # STATE_INGAME (0): Player is currently playing a song
+        # Other values: Player is in menu/song selection
+        if curr_pvid_base_addr == self.STATE_INGAME:
+            current_pvid_addr = settings.CURR_PVID_INGAME_ADDR
+            is_ingame = True
+        else:
+            curr_pvid_song_selection_offset = self._mem.read_int32(
+                settings.CURR_PVID_SONG_SELECTION_OFFSET_PTR_ADDR,
+                signed=False,
+                skip_eden=True
+            ) - settings.CURR_PVID_SONG_SELECTION_OFFSET_PTR_OFFSET
+            if curr_pvid_song_selection_offset is None:
+                logger.warning("Failed to read CURR_PVID_SONG_SELECTION_OFFSET, game may not be running")
+                return None, None
+
+            current_pvid_addr = curr_pvid_base_addr + curr_pvid_song_selection_offset
+            is_ingame = False
+            logger.debug(f"CURR_PVID_ADDR: 0x{current_pvid_addr:08X} = 0x{curr_pvid_base_addr:08X} + 0x{curr_pvid_song_selection_offset:08X}")
+
+        # Read the current PVID from the determined address
+        current_pvid = self._mem.read_int32(current_pvid_addr, signed=False, skip_eden=True, use_offset=is_ingame)
+        if current_pvid is None:
+            logger.warning(f"Failed to read CURR_PVID_BASE_ADDR 0x{curr_pvid_base_addr:08X}, "
+                           f"game may not be running or not in the right state")
+            return None, None
+
+        # Check if no song is selected (empty PVID values)
+        elif current_pvid == self.PVID_EMPTY_INGAME or current_pvid == self.PVID_EMPTY_SONG_SELECTION:
+            logger.info(f"CURR_PVID_ADDR checked: 0x{current_pvid_addr:08X}, PVID: {current_pvid}, no song selected")
+            return None, None
+        else:
+            logger.info(f"CURR_PVID_ADDR checked: 0x{current_pvid_addr:08X}, PVID: {current_pvid}, Ingame state: {is_ingame}")
+
+        return current_pvid, is_ingame
+
+    def get_last_selection(self) -> Tuple[Optional[int], Optional[int], Optional[int]]:
         """Get the currently selected song information."""
-        return self._mem.get_current_selection()
+        return self._mem.get_last_selection()

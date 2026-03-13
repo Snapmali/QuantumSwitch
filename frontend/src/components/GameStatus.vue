@@ -1,8 +1,9 @@
 <script setup lang="ts">
 import type { GameStatusDisplay } from '@/types'
+import { getDifficultyShortLabel, getDifficultyStyle, getDifficultyDisabledStyle } from '@/types'
 import { Refresh, VideoPlay } from '@element-plus/icons-vue'
 
-defineProps<{
+const props = defineProps<{
   status: GameStatusDisplay | null
   loading?: boolean
   autoRefresh?: boolean
@@ -13,6 +14,7 @@ const emit = defineEmits<{
   'update:autoRefresh': [value: boolean]
   'update:refreshInterval': [value: number]
   'refresh': []
+  'song-click': [songId: number]  // 新增：点击当前歌曲
 }>()
 
 const handleRefresh = () => {
@@ -43,41 +45,15 @@ const getEdenText = (isEden: boolean): string => {
   return isEden ? 'Eden 版本' : '标准版本'
 }
 
-const getDifficultyClass = (difficulty: string): string => {
-  const map: Record<string, string> = {
-    'EASY': 'diff-easy',
-    'NORMAL': 'diff-normal',
-    'HARD': 'diff-hard',
-    'EXTREME': 'diff-extreme',
-    'EXTRA EXTREME': 'diff-exex',
-    'RESERVED': 'diff-reserved',
+// 获取难度徽章样式（根据启用状态返回不同样式）
+const getDifficultyBadgeStyle = (diff: { name: string; enabled: boolean }): Record<string, string> => {
+  if (!diff.enabled) {
+    // 禁用状态：使用对应难度的浅色版本
+    return getDifficultyDisabledStyle(diff.name)
   }
-  // Handle unknown difficulty values like "Unknown(19)"
-  if (difficulty.startsWith('Unknown')) {
-    return 'diff-unknown'
-  }
-  return map[difficulty] || 'diff-normal'
-}
 
-const getDifficultyShortName = (difficulty: string): string => {
-  const map: Record<string, string> = {
-    'EASY': 'EASY',
-    'NORMAL': 'NORMAL',
-    'HARD': 'HARD',
-    'EXTREME': 'EXTREME',
-    'EXTRA_EXTREME': 'EXEXTREME',
-    'RESERVED': 'RESERVED',
-  }
-  // Handle unknown difficulty values like "Unknown(19)"
-  if (difficulty.startsWith('Unknown')) {
-    // Extract the number from "Unknown(19)" and show as "UNK(19)"
-    const match = difficulty.match(/Unknown\((\d+)\)/)
-    if (match) {
-      return `UNK(${match[1]})`
-    }
-    return 'UNKNOWN'
-  }
-  return map[difficulty] || difficulty
+  // 启用状态：使用统一的颜色配置
+  return getDifficultyStyle(diff.name)
 }
 
 const handleAutoRefreshChange = (value: boolean) => {
@@ -86,6 +62,12 @@ const handleAutoRefreshChange = (value: boolean) => {
 
 const handleIntervalChange = (value: number) => {
   emit('update:refreshInterval', value)
+}
+
+const handleSongClick = () => {
+  if (props.status?.currentSongInfo?.id) {
+    emit('song-click', props.status.currentSongInfo.id)
+  }
 }
 </script>
 
@@ -123,29 +105,26 @@ const handleIntervalChange = (value: number) => {
 
         <!-- Refresh Controls -->
         <el-divider />
-        <div class="refresh-controls">
-          <div class="refresh-row">
+        <div class="refresh-controls compact">
+          <div class="refresh-row compact-row">
             <el-switch
               :model-value="autoRefresh"
               @update:model-value="handleAutoRefreshChange"
               active-text="自动刷新"
               inline-prompt
             />
-            <span class="refresh-hint">{{ autoRefresh ? '已开启' : '已关闭' }}</span>
-          </div>
-          <div v-if="autoRefresh" class="refresh-row interval-row">
-            <span class="interval-label">刷新间隔:</span>
-            <el-slider
-              :model-value="refreshInterval"
-              @update:model-value="handleIntervalChange"
-              :min="1"
-              :max="10"
-              :step="1"
-              show-stops
-              :marks="{ 1: '1s', 5: '5s', 10: '10s' }"
-              style="flex: 1;"
-            />
-            <span class="interval-value">{{ refreshInterval }}s</span>
+            <template v-if="autoRefresh">
+              <el-slider
+                :model-value="refreshInterval"
+                @update:model-value="handleIntervalChange"
+                :min="1"
+                :max="10"
+                :step="1"
+                :show-tooltip="false"
+                style="width: 200px;"
+              />
+              <span class="interval-value">{{ refreshInterval }}s</span>
+            </template>
           </div>
         </div>
 
@@ -168,25 +147,33 @@ const handleIntervalChange = (value: number) => {
               <code class="offset-value">0x{{ (status.edenOffset ?? 0).toString(16).toUpperCase() }}</code>
             </div>
 
-            <template v-if="status.currentSong && 1 !== 1">
+            <template v-if="status?.currentSongInfo">
               <el-divider />
               <div class="current-song-section">
-                <div class="song-card">
+                <!-- 歌曲卡片（可点击） -->
+                <div class="song-card clickable" @click="handleSongClick">
                   <div class="song-icon">
                     <el-icon :size="24"><VideoPlay /></el-icon>
                   </div>
                   <div class="song-info">
-                    <div class="song-label">当前歌曲</div>
-                    <div class="song-name" :title="status.currentSong.name">
-                      {{ status.currentSong.name }}
+                    <div class="song-label">当前选择</div>
+                    <div class="song-name" :title="status.currentSongInfo.name">
+                      {{ status.currentSongInfo.name }}
                     </div>
+                    <div class="song-id">ID: {{ status.currentSongInfo.id }}</div>
                   </div>
                 </div>
-                <div class="difficulty-card">
-                  <div class="difficulty-label">难度</div>
-                  <div class="difficulty-badge" :class="getDifficultyClass(status.currentSong.difficultyType)">
-                    {{ getDifficultyShortName(status.currentSong.difficultyType) }}
-                  </div>
+                <!-- 难度集合（不可点击） -->
+                <div class="difficulties-row">
+                  <span
+                    v-for="diff in status.currentSongInfo.difficulties"
+                    :key="diff.name"
+                    class="diff-badge"
+                    :class="{ 'diff-disabled': !diff.enabled }"
+                    :style="getDifficultyBadgeStyle(diff)"
+                  >
+                    {{ getDifficultyShortLabel(diff.name) }}
+                  </span>
                 </div>
               </div>
             </template>
@@ -260,6 +247,22 @@ const handleIntervalChange = (value: number) => {
 
 .status-alert {
   margin-top: 12px;
+}
+
+.refresh-controls.compact {
+  gap: 4px;
+}
+
+.refresh-controls.compact .refresh-row {
+  gap: 24px;
+}
+
+.refresh-controls.compact .compact-row {
+  flex-wrap: nowrap;
+}
+
+.refresh-controls.compact .el-slider {
+  flex-shrink: 0;
 }
 
 .refresh-controls {
@@ -346,14 +349,47 @@ const handleIntervalChange = (value: number) => {
   gap: 12px;
 }
 
+.song-card.clickable {
+  cursor: pointer;
+}
+
+.song-card.clickable:hover {
+  opacity: 0.8;
+}
+
+.difficulties-row {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding: 0 4px;
+}
+
+.diff-badge {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4px 10px;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.song-id {
+  font-size: 12px;
+  color: var(--el-text-color-secondary);
+}
+
 .song-card {
   display: flex;
   align-items: center;
   gap: 12px;
+  height: 90px;
   background: linear-gradient(135deg, var(--el-color-primary-light-9) 0%, var(--el-color-primary-light-8) 100%);
   border-radius: 12px;
   padding: 16px;
   border: 1px solid var(--el-color-primary-light-7);
+  transition: opacity 0.2s;
+  box-sizing: border-box;
 }
 
 .song-icon {
@@ -390,6 +426,8 @@ const handleIntervalChange = (value: number) => {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  height: 22px;
+  line-height: 22px;
 }
 
 .difficulty-card {
@@ -407,19 +445,24 @@ const handleIntervalChange = (value: number) => {
 }
 
 .difficulty-badge {
+  width: 32px;
+  height: 32px;
+  border-radius: 4px;
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 6px 14px;
-  border-radius: 20px;
-  font-size: 13px;
   font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-  min-width: 60px;
+  font-size: 12px;
+  color: white;
+  flex-shrink: 0;
 }
 
-/* Difficulty Colors */
+/* 禁用状态的难度徽章 */
+.difficulty-badge.diff-disabled {
+  opacity: 0.6;
+}
+
+/* Difficulty Colors - 保留用于其他用途 */
 .diff-easy {
   background: linear-gradient(135deg, #409eff 0%, #66b1ff 100%);
   color: white;
@@ -497,42 +540,21 @@ const handleIntervalChange = (value: number) => {
   }
 
   .refresh-row {
-    flex-wrap: wrap;
-    gap: 10px;
-  }
-
-  .interval-row {
-    padding-left: 0;
-    padding-top: 8px;
-    border-top: 1px dashed var(--el-border-color-lighter);
-    flex-direction: row;
-    align-items: center;
-    gap: 10px;
     flex-wrap: nowrap;
+    gap: 10px;
   }
 
-  .interval-row .el-slider {
-    flex: 1;
-    min-width: 0;
+  .refresh-controls.compact .refresh-row {
+    gap: 20px;
   }
 
-  .interval-row .interval-value {
-    display: flex;
-    align-items: center;
-    height: 32px;
-    line-height: 32px;
-  }
-
-  .interval-label {
-    font-size: 14px;
-    min-width: auto;
+  .refresh-controls.compact .el-slider {
+    width: 180px !important;
   }
 
   .interval-value {
-    text-align: right;
-    font-size: 14px;
+    font-size: 13px;
     min-width: 25px;
-    white-space: nowrap;
   }
 
   .detail-item {
@@ -590,37 +612,21 @@ const handleIntervalChange = (value: number) => {
   }
 
   .refresh-row {
-    gap: 8px;
-    flex-wrap: wrap;
+    gap: 6px;
+    flex-wrap: nowrap;
   }
 
-  .interval-row {
-    padding-top: 6px;
-    gap: 8px;
-    flex-direction: row;
-    align-items: center;
+  .refresh-controls.compact .refresh-row {
+    gap: 16px;
   }
 
-  .interval-row .el-slider {
-    flex: 1;
+  .refresh-controls.compact .el-slider {
+    width: 160px !important;
   }
 
-  .interval-row .interval-value {
-    display: flex;
-    align-items: center;
-    min-width: 25px;
-    text-align: right;
-    height: 32px;
-    line-height: 32px;
-  }
-
-  .refresh-hint {
-    font-size: 11px;
-  }
-
-  .interval-label {
-    font-size: 13px;
-    min-width: auto;
+  .interval-value {
+    font-size: 12px;
+    min-width: 20px;
   }
 
   .detail-item {
@@ -636,54 +642,16 @@ const handleIntervalChange = (value: number) => {
   .offset-value {
     font-size: 11px;
   }
-
-  .refresh-controls :deep(.el-slider__marks-text) {
-    font-size: 10px;
-  }
-
-  .interval-row {
-    position: relative;
-    padding-bottom: 0;
-    align-items: center;
-  }
-
-  .interval-row .el-slider {
-    margin-right: 40px;
-  }
-
-  .interval-value {
-    position: absolute;
-    right: 0;
-    top: 50%;
-    transform: translateY(-50%);
-    display: flex;
-    align-items: center;
-    height: 32px;
-    line-height: 32px;
-  }
 }
 
-/* Extra small mobile - hide slider marks */
+/* Extra small mobile - ultra compact */
 @media (max-width: 360px) {
-  .refresh-controls :deep(.el-slider__marks-text) {
-    display: none;
-  }
-
-  .interval-row {
-    padding-bottom: 0;
-  }
-
-  .interval-row .el-slider {
-    margin-right: 0;
+  .refresh-controls.compact .el-slider {
+    width: 140px !important;
   }
 
   .interval-value {
-    position: static;
-    text-align: center;
-    margin-top: 4px;
-    height: auto;
-    line-height: normal;
-    transform: none;
+    font-size: 11px;
   }
 }
 </style>

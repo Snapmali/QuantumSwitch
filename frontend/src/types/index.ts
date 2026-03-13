@@ -29,6 +29,15 @@ export const DifficultyColorValues: Record<string, string> = {
   'EXTRA EXTREME': '#9333ea',
 }
 
+// 禁用状态的浅色颜色值
+export const DifficultyDisabledColorValues: Record<string, string> = {
+  'EASY': '#a0cfff',
+  'NORMAL': '#b3e19d',
+  'HARD': '#f0c78a',
+  'EXTREME': '#fab6b6',
+  'EXTRA EXTREME': '#d8b4fe',
+}
+
 // 短标签名称
 export const DifficultyShortNames: Record<string, string> = {
   'EASY': 'E',
@@ -67,6 +76,15 @@ export function getDifficultyColor(diffName: string): string {
 /** 获取 CSS 样式对象 */
 export function getDifficultyStyle(diffName: string): Record<string, string> {
   const color = DifficultyColorValues[diffName] || '#909399'
+  return {
+    backgroundColor: color,
+    color: '#fff',
+  }
+}
+
+/** 获取禁用状态的 CSS 样式对象（使用对应难度的浅色版本） */
+export function getDifficultyDisabledStyle(diffName: string): Record<string, string> {
+  const color = DifficultyDisabledColorValues[diffName] || '#c0c4cc'
   return {
     backgroundColor: color,
     color: '#fff',
@@ -146,6 +164,20 @@ export interface ModInfo {
   version?: string
 }
 
+// Current song difficulty info
+export interface CurrentSongDifficultyInfo {
+  name: string  // 难度名称，如 "EASY", "NORMAL" 等
+  enabled: boolean  // 是否启用
+}
+
+// Current song info from game status
+export interface CurrentSongInfo {
+  id: number
+  name: string
+  nameEn?: string
+  difficulties: CurrentSongDifficultyInfo[]  // 难度信息列表
+}
+
 // Game status - matches backend GameStatusResponse
 export interface GameStatus {
   running: boolean
@@ -157,6 +189,7 @@ export interface GameStatus {
   gameState?: number
   edenVersion: boolean
   edenOffset: number
+  currentSongInfo?: CurrentSongInfo  // 新增：当前歌曲信息
 }
 
 // Game status display format for GameStatus component
@@ -168,6 +201,7 @@ export interface GameStatusDisplay {
     name: string
     difficultyType: string
   }
+  currentSongInfo?: CurrentSongInfo  // 新增：当前歌曲完整信息
 }
 
 // API response wrapper

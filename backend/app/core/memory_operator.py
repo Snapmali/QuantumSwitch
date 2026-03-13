@@ -195,42 +195,91 @@ class MemoryOperator:
                 ctypes.byref(old_protect)
             )
 
-    def read_int32(self, address: int, use_offset: bool = True, skip_eden: bool = False) -> Optional[int]:
+    def read_int(
+            self,
+            address: int,
+            size: int,
+            signed: bool = True,
+            use_offset: bool = True,
+            skip_eden: bool = False
+    ) -> Optional[int]:
+        """Read an arbitrary integer from memory."""
+        original_address = address
+        logger.debug(f"Handling raw address: 0x{address:08X}")
+        if use_offset:
+            address = self._get_data_address(address, skip_eden=skip_eden)
+
+        data = self.read_memory(address, size)
+        if data is None:
+            return None
+        return int.from_bytes(data, byteorder='little', signed=signed)
+
+    def read_int32(
+            self,
+            address: int,
+            signed: bool = True,
+            use_offset: bool = True,
+            skip_eden: bool = False
+    ) -> Optional[int]:
         """Read a 32-bit integer from memory."""
         original_address = address
+        logger.debug(f"Handling raw address: 0x{address:08X}")
         if use_offset:
             address = self._get_data_address(address, skip_eden=skip_eden)
 
         data = self.read_memory(address, 4)
         if data is None:
             return None
-        return int.from_bytes(data, byteorder='little', signed=True)
+        return int.from_bytes(data, byteorder='little', signed=signed)
 
-    def read_int8(self, address: int, use_offset: bool = True, skip_eden: bool = False) -> Optional[int]:
+    def read_int8(
+            self,
+            address: int,
+            signed: bool = True,
+            use_offset: bool = True,
+            skip_eden: bool = False
+    ) -> Optional[int]:
         """Read an 8-bit integer from memory."""
         original_address = address
+        logger.debug(f"Handling raw address: 0x{address:08X}")
         if use_offset:
             address = self._get_data_address(address, skip_eden=skip_eden)
 
         data = self.read_memory(address, 1)
         if data is None:
             return None
-        return int.from_bytes(data, byteorder='little', signed=True)
+        return int.from_bytes(data, byteorder='little', signed=signed)
 
-    def write_int32(self, address: int, value: int, use_offset: bool = True, skip_eden: bool = False) -> bool:
+    def write_int32(
+            self,
+            address: int,
+            value: int,
+            signed: bool = True,
+            use_offset: bool = True,
+            skip_eden: bool = False
+    ) -> bool:
         """Write a 32-bit integer to memory."""
+        logger.debug(f"Handling raw address: 0x{address:08X}")
         if use_offset:
             address = self._get_data_address(address, skip_eden=skip_eden)
 
-        data = value.to_bytes(4, byteorder='little', signed=True)
+        data = value.to_bytes(4, byteorder='little', signed=signed)
         return self.write_memory(address, data)
 
-    def write_int8(self, address: int, value: int, use_offset: bool = True, skip_eden: bool = False) -> bool:
+    def write_int8(
+            self,
+            address: int,
+            value: int,
+            signed: bool = True,
+            use_offset: bool = True,
+            skip_eden: bool = False
+    ) -> bool:
         """Write an 8-bit integer to memory."""
+        logger.debug(f"Handling raw address: 0x{address:08X}")
         if use_offset:
             address = self._get_data_address(address, skip_eden=skip_eden)
 
-        data = value.to_bytes(1, byteorder='little', signed=True)
+        data = value.to_bytes(1, byteorder='little', signed=signed)
         return self.write_memory(address, data)
 
     def get_game_state(self) -> Optional[int]:
@@ -240,7 +289,7 @@ class MemoryOperator:
         """
         return self.read_int32(settings.START_CHANGE_ADDR, skip_eden=True)
 
-    def get_current_selection(self) -> Tuple[Optional[int], Optional[int], Optional[int]]:
+    def get_last_selection(self) -> Tuple[Optional[int], Optional[int], Optional[int]]:
         """
         Get current song selection data.
 

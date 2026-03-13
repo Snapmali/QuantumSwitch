@@ -7,7 +7,8 @@ from ..models import (
     SwitchSongRequest,
     SwitchSongResponse,
     ApiResponse,
-    CurrentSongResponse,
+    CurrentSongInfo,
+    CurrentSongDifficultyInfo,
 )
 from ..models.song import DifficultyType
 from ..core.bootstrap import (
@@ -21,42 +22,71 @@ from ..utils.logger import logger
 router = APIRouter(prefix="/game", tags=["game"])
 
 
+def _build_current_song_info(song) -> CurrentSongInfo:
+    """Build CurrentSongInfo from a Song object."""
+    # Build Mod enabled status lookup table
+    mod_enabled_map = {m.id: m.enabled for m in song.mod_infos}
+
+    # Build difficulty info with enabled status
+    difficulty_infos = []
+    for d in song.difficulty_details:
+        # Original difficulty is always enabled
+        if d.is_original:
+            is_difficulty_enabled = True
+        else:
+            # Check if any mod providing this difficulty is enabled
+            is_difficulty_enabled = any(
+                mod_enabled_map.get(mod_id, False)
+                for mod_id in d.mod_ids
+            ) if d.mod_ids else song.is_vanilla
+
+        difficulty_infos.append(CurrentSongDifficultyInfo(
+            name=d.type.display_name,
+            enabled=is_difficulty_enabled
+        ))
+
+    return CurrentSongInfo(
+        id=song.id,
+        name=song.get_display_name(),
+        nameEn=song.name_en,
+        difficulties=difficulty_infos
+    )
+
+
 def get_game_status_internal() -> GameStatusResponse:
     """Get current game status."""
     pm = get_process_manager()
     mem = get_memory_operator()
     selector = get_song_selector()  # Ensure selector is initialized
 
-    # Check if game is running
-    is_running = pm.find_process() is not None
+    # Check if game is running, and try to attach to the game process.
+    is_running = pm.attach()
 
     if not is_running:
         return GameStatusResponse(running=False)
 
-    # Get current selection from memory
-    pvid, sort_id, difficulty = mem.get_current_selection()
-
-    # Get difficulty name
-    difficulty_name = None
-    if difficulty is not None:
-        try:
-            difficulty_name = DifficultyType(difficulty).display_name
-        except ValueError:
-            difficulty_name = f"Unknown({difficulty})"
-
     # Get game state
     game_state = mem.get_game_state()
+
+    # Get current selection from memory
+    pvid, is_ingame = selector.get_current_selection()
+
+    # Get current song info from selector
+    current_song_info = None
+    if pvid is not None:
+        parser = get_pvdb_parser()
+        song = parser.get_song(pvid)
+        if song:
+            current_song_info = _build_current_song_info(song)
 
     return GameStatusResponse(
         running=is_running,
         processId=pm.process_id,
         currentSongId=pvid,
-        currentSortId=sort_id,
-        currentDifficulty=difficulty,
-        currentDifficultyName=difficulty_name,
         gameState=game_state,
         edenVersion=mem.is_eden_version,
-        edenOffset=mem.eden_offset
+        edenOffset=mem.eden_offset,
+        currentSongInfo=current_song_info
     )
 
 
@@ -125,44 +155,34 @@ async def switch_song(request: SwitchSongRequest):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.get("/current", response_model=ApiResponse[CurrentSongResponse])
+@router.get("/current", response_model=ApiResponse[CurrentSongInfo])
 async def get_current_song():
     """Get currently selected song in game."""
     try:
-        mem = get_memory_operator()
-        pvid, sort_id, difficulty = mem.get_current_selection()
+        selector = get_song_selector()
+        parser = get_pvdb_parser()
+
+        # Get current selection from selector (reads from game memory)
+        pvid, is_ingame = selector.get_current_selection()
 
         if pvid is None:
-            return ApiResponse(success=True, data=CurrentSongResponse())
+            return ApiResponse(success=True, data=CurrentSongInfo(id=0, name=""))
 
-        parser = get_pvdb_parser()
+        # Get song info from parser
         song = parser.get_song(pvid)
 
         if song is None:
-            return ApiResponse(success=True, data=CurrentSongResponse(
-                songId=pvid,
-                sortId=sort_id,
-                difficulty=difficulty
-            ))
-
-        # Get difficulty name
-        difficulty_name = None
-        if difficulty is not None:
-            try:
-                difficulty_name = DifficultyType(difficulty).display_name
-            except ValueError:
-                pass
-
-        return ApiResponse(
-            success=True,
-            data=CurrentSongResponse(
-                songId=pvid,
-                sortId=sort_id,
-                difficulty=difficulty,
-                difficultyName=difficulty_name,
-                songName=song.name
+            return ApiResponse(
+                success=True,
+                data=CurrentSongInfo(
+                    id=pvid,
+                    name=f"Unknown Song ({pvid})"
+                )
             )
-        )
+
+        current_song_info = _build_current_song_info(song)
+
+        return ApiResponse(success=True, data=current_song_info)
     except Exception as e:
         logger.error(f"Failed to get current song: {e}")
         raise HTTPException(status_code=500, detail=str(e))

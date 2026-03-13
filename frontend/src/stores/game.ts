@@ -17,6 +17,7 @@ export const useGameStore = defineStore('game', () => {
     gameState: undefined,
     edenVersion: false,
     edenOffset: 0,
+    currentSongInfo: undefined,
   })
   const switching = ref(false)
   const loading = ref(false)
@@ -55,6 +56,7 @@ export const useGameStore = defineStore('game', () => {
       status: statusStr,
       isEdenVersion: s.edenVersion,
       edenOffset: s.edenOffset,
+      currentSongInfo: s.currentSongInfo,  // 新增：包含当前歌曲信息
     }
 
     // Add current song info if available

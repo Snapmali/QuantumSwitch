@@ -85,6 +85,10 @@ class Settings(BaseSettings):
     GAME_MODS_DIRECTORY: Optional[Path] = None
 
     # Memory addresses (base addresses, may need Eden offset)
+    CURR_PVID_BASE_PTR_ADDR: int = 0xCC5EF18
+    CURR_PVID_SONG_SELECTION_OFFSET_PTR_ADDR: int = 0x6EFE8C
+    CURR_PVID_SONG_SELECTION_OFFSET_PTR_OFFSET: int = 0x9C8
+
     # Control addresses (not affected by Eden offset)
     CHANGE_SONG_SELECT_ADDR: int = 0xCC61098
     START_CHANGE_ADDR: int = 0xCC610A0
@@ -94,6 +98,8 @@ class Settings(BaseSettings):
     LAST_SELECT_SORT_ADDR: int = 0x12B6354
     LAST_SELECT_DIFF_LEVEL_ADDR: int = 0x12B635C
     LAST_SELECT_DIFF_TYPE_ADDR: int = 0x12B634C
+
+    CURR_PVID_INGAME_ADDR: int = 0x16E2BB0
 
     # Eden offset configuration
     # Detection: Read LAST_SELECT_PVID_ADDR (0x12B6350), if value is 0, apply offset 0x105F460

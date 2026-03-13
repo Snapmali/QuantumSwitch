@@ -10,6 +10,8 @@ from .schemas import (
     ConfigResponse,
     CurrentSongResponse,
     DifficultyDetail,
+    CurrentSongInfo,
+    CurrentSongDifficultyInfo,
 )
 
 __all__ = [
@@ -26,5 +28,7 @@ __all__ = [
     "ConfigResponse",
     "CurrentSongResponse",
     "DifficultyDetail",
+    "CurrentSongInfo",
+    "CurrentSongDifficultyInfo",
 ]
 

@@ -126,7 +126,7 @@ class ProcessManager:
         """
         result = self.find_process()
         if result is None:
-            logger.warning(f"Process {self.process_name} not found")
+            logger.info(f"Process {self.process_name} not found")
             return False
 
         if self.is_attached:

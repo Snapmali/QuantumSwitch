@@ -3,7 +3,7 @@ import { ref, computed, watch } from 'vue'
 import type { Song } from '@/types'
 import { Search, Refresh, Star, StarFilled } from '@element-plus/icons-vue'
 import { debounce } from 'lodash-es'
-import { getDifficultyStyle, getDifficultyShortLabel } from '@/types'
+import { getDifficultyStyle, getDifficultyShortLabel, getDifficultyDisabledStyle } from '@/types'
 
 const props = defineProps<{
   songs: Song[]
@@ -187,7 +187,7 @@ const formatLevel = (level: number): string => {
           >
             <span
               class="diff-tag-static"
-              :style="getDifficultyStyle(detail.name)"
+              :style="detail.enabled === false ? getDifficultyDisabledStyle(detail.name) : getDifficultyStyle(detail.name)"
             >
               <span class="diff-short">{{ getDifficultyShortLabel(detail.name) }}</span>
               <span v-if="detail.level > 0" class="diff-level">

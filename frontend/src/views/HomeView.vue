@@ -4,6 +4,7 @@ import { useSongStore } from '@/stores/songs'
 import { useGameStore } from '@/stores/game'
 import { ElMessage } from 'element-plus'
 import type { Song } from '@/types'
+import { songApi } from '@/api'
 import SongList from '@/components/SongList.vue'
 import SongDetail from '@/components/SongDetail.vue'
 import GameStatus from '@/components/GameStatus.vue'
@@ -114,6 +115,26 @@ const handleToggleFavoriteDetail = async () => {
 const handleFavoritesOnlyChange = (value: boolean) => {
   songStore.setFavoritesOnly(value)
 }
+
+const handleCurrentSongClick = async (songId: number) => {
+  // 检查是否已在当前列表中
+  const existingSong = songStore.songs.find(s => s.id === songId)
+  if (existingSong) {
+    // 如果在当前列表中，直接选中
+    await handleSongSelect(existingSong)
+  } else {
+    // 如果不在当前列表中，通过 API 获取完整歌曲信息
+    try {
+      const response = await songApi.getById(songId)
+      if (response.data.data) {
+        const song = response.data.data
+        await handleSongSelect(song)
+      }
+    } catch (err) {
+      ElMessage.error('无法获取歌曲信息')
+    }
+  }
+}
 </script>
 
 <template>
@@ -140,6 +161,7 @@ const handleFavoritesOnlyChange = (value: boolean) => {
             v-model:auto-refresh="gameStore.autoRefresh"
             v-model:refresh-interval="refreshIntervalSeconds"
             @refresh="gameStore.refreshStatus"
+            @song-click="handleCurrentSongClick"
           />
           <el-card shadow="never" class="song-list-card">
             <SongList

@@ -156,6 +156,24 @@ class SongListResponse(BaseModel):
     hiddenCount: int = Field(default=0)
 
 
+class CurrentSongDifficultyInfo(BaseModel):
+    """当前选择歌曲的难度信息"""
+    model_config = ConfigDict(populate_by_name=True)
+
+    name: str  # 难度名称，如 "EASY", "NORMAL" 等
+    enabled: bool = True  # 是否启用
+
+
+class CurrentSongInfo(BaseModel):
+    """当前选择歌曲的基本信息"""
+    model_config = ConfigDict(populate_by_name=True)
+
+    id: int
+    name: str
+    nameEn: Optional[str] = None
+    difficulties: List[CurrentSongDifficultyInfo] = []  # 难度信息列表
+
+
 class GameStatusResponse(BaseModel):
     """Response schema for game status."""
     model_config = ConfigDict(populate_by_name=True)
@@ -169,6 +187,7 @@ class GameStatusResponse(BaseModel):
     gameState: Optional[int] = None
     edenVersion: bool = False
     edenOffset: int = 0
+    currentSongInfo: Optional[CurrentSongInfo] = None  # 新增：当前歌曲信息
 
 
 class SwitchSongRequest(BaseModel):
