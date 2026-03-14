@@ -90,7 +90,8 @@ class SongSelector:
     def switch_song(
         self,
         song: Song,
-        difficulty: DifficultyType = DifficultyType.HARD
+        difficulty: DifficultyType = DifficultyType.HARD,
+        console: bool = False
     ) -> Tuple[bool, str, Optional[DifficultyType], Optional[SwitchMode]]:
         """
         Switch to the specified song and difficulty.
@@ -98,6 +99,7 @@ class SongSelector:
         Args:
             song: The song to switch to
             difficulty: The desired difficulty
+            console: Switch to the console mode
 
         Returns:
             Tuple of (success, message, actual_difficulty, mode)
@@ -116,9 +118,9 @@ class SongSelector:
 
         # Execute the appropriate switch method
         if mode == SwitchMode.STANDARD:
-            success = self._execute_standard_switch(song, actual_difficulty)
+            success = self._execute_standard_switch(song, actual_difficulty, console)
         else:
-            success = self._execute_delayed_switch(song, actual_difficulty)
+            success = self._execute_delayed_switch(song, actual_difficulty, console)
 
         if success:
             message = f"Successfully switched to '{song.name}' ({actual_difficulty.display_name})"
@@ -129,7 +131,7 @@ class SongSelector:
 
         return success, message, actual_difficulty, mode
 
-    def _execute_standard_switch(self, song: Song, difficulty: DifficultyType) -> bool:
+    def _execute_standard_switch(self, song: Song, difficulty: DifficultyType, console: bool = False) -> bool:
         """
         Execute standard song switch (when in song selection state).
 
@@ -203,7 +205,7 @@ class SongSelector:
             logger.exception(f"Error during standard switch: {e}")
             return False
 
-    def _execute_delayed_switch(self, song: Song, difficulty: DifficultyType) -> bool:
+    def _execute_delayed_switch(self, song: Song, difficulty: DifficultyType, console: bool = False) -> bool:
         """
         Execute delayed song switch (when in PV selection state).
         Changes are buffered and applied when user enters song selection.

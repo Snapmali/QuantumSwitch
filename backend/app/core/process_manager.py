@@ -1,7 +1,7 @@
 """Process management for finding and accessing the game process."""
 import ctypes
 from ctypes import wintypes
-from typing import Optional, Tuple
+from typing import Optional, List, Dict
 import psutil
 from app.utils.logger import logger
 from app.config import settings
@@ -27,17 +27,19 @@ class ProcessManager:
         self._process_handle: Optional[wintypes.HANDLE] = None
         self._process_id: Optional[int] = None
         self._base_address: Optional[int] = None
+        self._nc_address: Optional[int] = None
         self._eden_checked = False
+        self._dll_list_cache: Optional[Dict[str, int]] = None
 
-    @property
-    def is_attached(self) -> bool:
-        """Check if currently attached to a process."""
-        if self._process_handle is None:
-            return False
-        # Handle both HANDLE objects (with .value) and raw integers
-        if isinstance(self._process_handle, int):
-            return self._process_handle != 0
-        return self._process_handle.value != 0
+    def __enter__(self):
+        """Context manager entry."""
+        self.attach()
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        """Context manager exit."""
+        self.detach()
+        return False
 
     @property
     def process_id(self) -> Optional[int]:
@@ -54,14 +56,36 @@ class ProcessManager:
         """Get is eden version checked."""
         return self._eden_checked
 
-    def find_process(self) -> Optional[Tuple[int, int]]:
+    def set_eden_checked(self):
+        """Get whether eden version is checked."""
+        self._eden_checked = True
+        logger.debug(f"Eden version checked: {self._eden_checked}")
+
+    @property
+    def is_attached(self) -> bool:
+        """Check if currently attached to a process."""
+        if self._process_handle is None:
+            return False
+        # Handle both HANDLE objects (with .value) and raw integers
+        if isinstance(self._process_handle, int):
+            return self._process_handle != 0
+        return self._process_handle.value != 0
+
+    def get_handle(self) -> Optional[wintypes.HANDLE]:
+        """Get the process handle."""
+        if not self.is_attached:
+            if not self.attach():
+                return None
+        return self._process_handle
+
+    def find_process(self) -> Optional[int]:
         """
         Find the game process by name.
 
         Returns:
-            Tuple of (process_id, base_address) if found, None otherwise
+            Process ID if found, None otherwise
         """
-        for proc in psutil.process_iter(['pid', 'name', 'exe']):
+        for proc in psutil.process_iter(['pid', 'name']):
             try:
                 if proc.info['name'] == self.process_name:
                     pid = proc.info['pid']
@@ -70,52 +94,13 @@ class ProcessManager:
                     if self.is_attached and self._process_id != pid:
                         self.detach()
 
-                    # Get base address using psutil
-                    p = psutil.Process(pid)
-                    # For 64-bit Windows, the base address is typically 0x140000000
-                    # We need to enumerate modules to find the actual base
-                    base_addr = self._get_module_base_address(pid)
-                    logger.info(f"Found process {self.process_name} (PID: {pid}) at base address 0x{base_addr:08X}")
-                    return pid, base_addr
+                    return pid
             except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
                 continue
 
         if self.is_attached:
             self.detach()
         return None
-
-    def _get_module_base_address(self, pid: int) -> int:
-        """
-        Get the base address of the main module for a process.
-        Uses Windows API to enumerate modules.
-        """
-        kernel32 = ctypes.windll.kernel32
-
-        # Open process with query access
-        h_process = kernel32.OpenProcess(
-            self.PROCESS_QUERY_INFORMATION | self.PROCESS_VM_READ,
-            False,
-            pid
-        )
-
-        if not h_process:
-            # Default base address for 64-bit PE executables
-            return 0x140000000
-
-        try:
-            # Use EnumProcessModules to get module handles
-            h_mods = (wintypes.HMODULE * 1024)()
-            cb_needed = wintypes.DWORD()
-
-            psapi = ctypes.windll.psapi
-            if psapi.EnumProcessModules(h_process, ctypes.byref(h_mods), ctypes.sizeof(h_mods), ctypes.byref(cb_needed)):
-                # First module is the executable itself
-                return h_mods[0]
-
-        finally:
-            kernel32.CloseHandle(h_process)
-
-        return 0x140000000
 
     def attach(self) -> bool:
         """
@@ -124,17 +109,15 @@ class ProcessManager:
         Returns:
             True if successfully attached, False otherwise
         """
-        result = self.find_process()
-        if result is None:
+        pid = self.find_process()
+        if pid is None:
             logger.info(f"Process {self.process_name} not found")
             return False
 
         if self.is_attached:
             return True
 
-        pid, base_addr = result
         self._process_id = pid
-        self._base_address = base_addr
 
         # Open process with required access rights
         kernel32 = ctypes.windll.kernel32
@@ -154,8 +137,28 @@ class ProcessManager:
             self._process_handle = None
             self._process_id = None
             self._base_address = None
+            self._nc_address = None
             self._eden_checked = False
             return False
+
+        # Get base address from the opened handle and cache DLL list
+        modules = self._enum_modules(self._process_handle)
+        if modules:
+            self._base_address = modules[0]
+            logger.info(f"Found process {self.process_name} (PID: {pid}) at base address 0x{self._base_address:08X}")
+            # Build DLL cache from already enumerated modules
+            self._dll_list_cache = self._build_dll_list_from_modules(modules)
+        else:
+            self._base_address = 0x140000000
+            self._dll_list_cache = {}
+            logger.warning(f"Could not enumerate modules, using default base address 0x{self._base_address:08X}")
+
+        nc_dll = self.get_dll(settings.NEW_CLASSICS_DLL)
+        if nc_dll:
+            self._nc_address = nc_dll
+            logger.info(f"Found New Classics DLL at address 0x{self._nc_address:08X}")
+        else:
+            logger.debug("New Classics DLL not found")
 
         logger.info(f"Successfully attached to process {pid}")
         return True
@@ -172,24 +175,87 @@ class ProcessManager:
         self._process_handle = None
         self._process_id = None
         self._base_address = None
+        self._nc_address = None
         self._eden_checked = False
+        self._dll_list_cache = None
 
-    def __enter__(self):
-        """Context manager entry."""
-        self.attach()
-        return self
+    def get_modules(self) -> List[int]:
+        """
+        Enumerate all modules (DLLs) loaded in the attached process.
 
-    def __exit__(self, exc_type, exc_val, exc_tb):
-        """Context manager exit."""
-        self.detach()
-        return False
-
-    def get_handle(self) -> Optional[wintypes.HANDLE]:
-        """Get the process handle."""
+        Returns:
+            List of HMODULE values (module base addresses)
+        """
         if not self.is_attached:
-            if not self.attach():
-                return None
-        return self._process_handle
+            logger.error("Cannot get modules: not attached to process")
+            return []
+
+        return self._enum_modules(self._process_handle)
+
+    def _enum_modules(self, h_process) -> List[int]:
+        """
+        Core method to enumerate all modules in a process.
+        Shared by _get_module_base_address and get_modules.
+
+        Args:
+            h_process: Windows process handle (can be int or c_void_p)
+
+        Returns:
+            List of HMODULE values (module base addresses)
+        """
+        psapi = ctypes.windll.psapi
+        cb_needed = wintypes.DWORD()
+
+        # First call to get required buffer size
+        if not psapi.EnumProcessModules(
+            h_process,
+            None,
+            0,
+            ctypes.byref(cb_needed)
+        ):
+            return []
+
+        # Allocate buffer for module handles
+        module_count = cb_needed.value // ctypes.sizeof(wintypes.HMODULE)
+        h_mods = (wintypes.HMODULE * module_count)()
+
+        # Second call to get actual module handles
+        if not psapi.EnumProcessModules(
+            h_process,
+            ctypes.byref(h_mods),
+            ctypes.sizeof(h_mods),
+            ctypes.byref(cb_needed)
+        ):
+            return []
+
+        # Filter out None/null handles
+        return [h for h in h_mods if h]
+
+    def _build_dll_list_from_modules(self, modules: List[int]) -> Dict[str, int]:
+        """
+        Build DLL list dictionary from already enumerated module handles.
+
+        Args:
+            modules: List of HMODULE values from _enum_modules
+
+        Returns:
+            Dictionary mapping module file paths to HMODULE values
+        """
+        output: Dict[str, int] = {}
+        psapi = ctypes.windll.psapi
+
+        for hmodule in modules:
+            path_buffer = ctypes.create_unicode_buffer(1024)
+            size = psapi.GetModuleFileNameExW(
+                self._process_handle,
+                hmodule,
+                path_buffer,
+                1024
+            )
+            if size > 0:
+                output[path_buffer.value] = hmodule
+
+        return output
 
     def get_process_info(self) -> Optional[dict]:
         """Get process information dictionary."""
@@ -201,7 +267,81 @@ class ProcessManager:
             "base_address": self._base_address,
         }
 
-    def set_eden_checked(self):
-        """Get whether eden version is checked."""
-        self._eden_checked = True
-        logger.debug(f"Eden version checked: {self._eden_checked}")
+    def get_dll_list(self, filter_name: Optional[str] = None) -> Dict[str, int]:
+        """
+        Get a mapping of module file paths to their handles.
+        Uses cached list if available (populated during attach).
+
+        Args:
+            filter_name: Optional string to filter module names (case-insensitive)
+
+        Returns:
+            Dictionary mapping module file paths to HMODULE values
+        """
+        # Use cached list if available
+        if self._dll_list_cache is None:
+            # Build from scratch using already enumerated modules
+            modules = self.get_modules()
+            dll_list = self._build_dll_list_from_modules(modules)
+        else:
+            dll_list = self._dll_list_cache
+
+        if filter_name is not None:
+            filter_lower = filter_name.lower()
+            dll_list = {
+                name: hmodule for name, hmodule in dll_list.items()
+                if filter_lower in name.lower()
+            }
+
+        return dll_list
+
+    def get_dll(self, name: str) -> Optional[int]:
+        """
+        Find a specific DLL by name (case-insensitive substring match).
+
+        Args:
+            name: The DLL name to search for (e.g., "divamodloader")
+
+        Returns:
+            HMODULE value (base address) of the found DLL
+
+        Raises:
+            DllNotFoundException: If the DLL is not found in the process
+        """
+        name_lower = name.lower()
+        dll_list = self.get_dll_list()
+
+        for module_path, hmodule in dll_list.items():
+            if name_lower in module_path.lower():
+                return hmodule
+
+        return None
+
+    def get_dll_info(self) -> List[dict]:
+        """
+        Get detailed information about all loaded modules.
+
+        Returns:
+            List of dictionaries containing module information
+        """
+        modules = []
+        psapi = ctypes.windll.psapi
+
+        for hmodule in self.get_modules():
+            # Get module file name
+            path_buffer = ctypes.create_unicode_buffer(1024)
+            size = psapi.GetModuleFileNameExW(
+                self._process_handle,
+                hmodule,
+                path_buffer,
+                1024
+            )
+
+            if size > 0:
+                modules.append({
+                    "path": path_buffer.value,
+                    "base_address": hmodule,
+                    "base_address_hex": f"0x{hmodule:08X}"
+                })
+
+        return modules

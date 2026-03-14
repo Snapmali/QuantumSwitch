@@ -12,6 +12,7 @@ Quantum Switch 是一个用于 Hatsune Miku: Project DIVA Mega Mix+ 的网页版
 
 - 感谢 hiki8man 的 [Select Song with PVID](https://gamebanana.com/tools/21051) 项目、原版歌曲 mod_pv_db，以及对切歌逻辑的讲解，对理解相关流程提供了很大帮助
 - 感谢 sasnchis 的 [DivaSongViewer](https://gamebanana.com/tools/18296) 项目，本项目中歌曲切换核心逻辑、mod_pv_db 解析逻辑大量参考 DivaSongViewer 开源项目
+- 感谢 安定 大佬提供的当前歌曲的检测逻辑及示例代码
 - Project DIVA Mega Mix+ 社区，GameBanana 的 [mod_pv_db 结构说明](https://gamebanana.com/tuts/15681#H1_13)
 - 各路 AI，没这个办不成事
 

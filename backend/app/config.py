@@ -84,6 +84,9 @@ class Settings(BaseSettings):
     GAME_PROCESS_NAME: str = "DivaMegaMix.exe"
     GAME_MODS_DIRECTORY: Optional[Path] = None
 
+    # DLL names
+    NEW_CLASSICS_DLL: str = "NewClassics.dll"
+
     # Memory addresses (base addresses, may need Eden offset)
     CURR_PVID_BASE_PTR_ADDR: int = 0xCC5EF18
     CURR_PVID_SONG_SELECTION_OFFSET_PTR_ADDR: int = 0x6EFE8C
