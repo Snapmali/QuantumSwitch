@@ -6,15 +6,22 @@ from loguru import logger
 # Remove default handler
 logger.remove()
 
-# Import settings to check DEBUG mode
-from ..config import settings
+
+def _get_debug_mode() -> bool:
+    """Lazy import settings to avoid circular dependency."""
+    try:
+        from ..config import settings
+        return settings.DEBUG
+    except ImportError:
+        return False
+
 
 # Add console handler with colored output
 logger.add(
     sys.stdout,
     colorize=True,
     format="<green>{time:YYYY-MM-DD HH:mm:ss}</green> | <level>{level: <8}</level> | <cyan>{name}</cyan>:<cyan>{function}</cyan>:<cyan>{line}</cyan> - <level>{message}</level>",
-    level="DEBUG" if settings.DEBUG else "INFO"
+    level="DEBUG" if _get_debug_mode() else "INFO"
 )
 
 # Add file handler for persistent logs

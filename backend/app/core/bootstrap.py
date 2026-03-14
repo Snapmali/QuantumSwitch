@@ -2,10 +2,37 @@
 from ..config import settings
 from ..utils.logger import logger
 from .container import get_container
+from .game_detector import detect_game_directories
 from .process_manager import ProcessManager
 from .memory_operator import MemoryOperator
 from .song_selector import SongSelector
 from .pvdb_parser import PvdbParser
+
+
+def _init_game_directories() -> None:
+    """初始化游戏目录，优先使用 .env 中配置的 GAME_MODS_DIRECTORY"""
+    game_dir, mods_dir = detect_game_directories(
+        game_id=settings.GAME_ID,
+        configured_mods_dir=settings.GAME_MODS_DIRECTORY,
+        configured_game_dir=settings.GAME_DIRECTORY
+    )
+
+    if game_dir is not None:
+        settings.GAME_DIRECTORY = game_dir
+        logger.info(f"Game directory: {game_dir}")
+    else:
+        logger.warning("Could not determine game directory from .env or registry")
+
+    if mods_dir is not None:
+        settings.GAME_MODS_DIRECTORY = mods_dir
+        logger.info(f"Mods directory: {mods_dir}")
+
+    # Validate directories exist
+    if game_dir is not None and not game_dir.exists():
+        logger.warning(f"Game directory does not exist: {game_dir}")
+
+    if mods_dir is not None and not mods_dir.exists():
+        logger.warning(f"Mods directory does not exist: {mods_dir}")
 
 
 def bootstrap_services() -> None:
@@ -17,6 +44,9 @@ def bootstrap_services() -> None:
     container = get_container()
 
     logger.info("Bootstrapping services...")
+
+    # 初始化游戏目录
+    _init_game_directories()
 
     # 注册 ProcessManager
     container.register_singleton(
@@ -48,20 +78,20 @@ def bootstrap_services() -> None:
 
 
 def get_process_manager() -> ProcessManager:
-    """便捷函数: 获取 ProcessManager 实例。"""
+    """获取 ProcessManager 实例"""
     return get_container().resolve(ProcessManager)
 
 
 def get_memory_operator() -> MemoryOperator:
-    """便捷函数: 获取 MemoryOperator 实例。"""
+    """获取 MemoryOperator 实例"""
     return get_container().resolve(MemoryOperator)
 
 
 def get_song_selector() -> SongSelector:
-    """便捷函数: 获取 SongSelector 实例。"""
+    """获取 SongSelector 实例"""
     return get_container().resolve(SongSelector)
 
 
 def get_pvdb_parser() -> PvdbParser:
-    """便捷函数: 获取 PvdbParser 实例。"""
+    """获取 PvdbParser 实例"""
     return get_container().resolve(PvdbParser)

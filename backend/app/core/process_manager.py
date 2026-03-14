@@ -1,10 +1,13 @@
 """Process management for finding and accessing the game process."""
 import ctypes
 from ctypes import wintypes
+from pathlib import Path
 from typing import Optional, List, Dict
 import psutil
+
+from app.models.process_module import ProcessModule
 from app.utils.logger import logger
-from app.config import settings
+from app.config import settings, DllSettings
 
 
 class ProcessManager:
@@ -27,9 +30,8 @@ class ProcessManager:
         self._process_handle: Optional[wintypes.HANDLE] = None
         self._process_id: Optional[int] = None
         self._base_address: Optional[int] = None
-        self._nc_address: Optional[int] = None
         self._eden_checked = False
-        self._dll_list_cache: Optional[Dict[str, int]] = None
+        self._dll_cache: Optional[Dict[str, ProcessModule]] = None
 
     def __enter__(self):
         """Context manager entry."""
@@ -137,8 +139,8 @@ class ProcessManager:
             self._process_handle = None
             self._process_id = None
             self._base_address = None
-            self._nc_address = None
             self._eden_checked = False
+            self._dll_cache = None
             return False
 
         # Get base address from the opened handle and cache DLL list
@@ -147,18 +149,11 @@ class ProcessManager:
             self._base_address = modules[0]
             logger.info(f"Found process {self.process_name} (PID: {pid}) at base address 0x{self._base_address:08X}")
             # Build DLL cache from already enumerated modules
-            self._dll_list_cache = self._build_dll_list_from_modules(modules)
+            self._dll_cache = self._build_dll_cache(modules)
         else:
             self._base_address = 0x140000000
-            self._dll_list_cache = {}
+            self._dll_cache = {}
             logger.warning(f"Could not enumerate modules, using default base address 0x{self._base_address:08X}")
-
-        nc_dll = self.get_dll(settings.NEW_CLASSICS_DLL)
-        if nc_dll:
-            self._nc_address = nc_dll
-            logger.info(f"Found New Classics DLL at address 0x{self._nc_address:08X}")
-        else:
-            logger.debug("New Classics DLL not found")
 
         logger.info(f"Successfully attached to process {pid}")
         return True
@@ -175,9 +170,8 @@ class ProcessManager:
         self._process_handle = None
         self._process_id = None
         self._base_address = None
-        self._nc_address = None
         self._eden_checked = False
-        self._dll_list_cache = None
+        self._dll_cache = None
 
     def get_modules(self) -> List[int]:
         """
@@ -231,34 +225,8 @@ class ProcessManager:
         # Filter out None/null handles
         return [h for h in h_mods if h]
 
-    def _build_dll_list_from_modules(self, modules: List[int]) -> Dict[str, int]:
-        """
-        Build DLL list dictionary from already enumerated module handles.
-
-        Args:
-            modules: List of HMODULE values from _enum_modules
-
-        Returns:
-            Dictionary mapping module file paths to HMODULE values
-        """
-        output: Dict[str, int] = {}
-        psapi = ctypes.windll.psapi
-
-        for hmodule in modules:
-            path_buffer = ctypes.create_unicode_buffer(1024)
-            size = psapi.GetModuleFileNameExW(
-                self._process_handle,
-                hmodule,
-                path_buffer,
-                1024
-            )
-            if size > 0:
-                output[path_buffer.value] = hmodule
-
-        return output
-
     def get_process_info(self) -> Optional[dict]:
-        """Get process information dictionary."""
+        """Get process information dictionary"""
         if not self.is_attached:
             if not self.attach():
                 return None
@@ -266,6 +234,25 @@ class ProcessManager:
             "pid": self._process_id,
             "base_address": self._base_address,
         }
+
+    def get_cached_dll(self, dll: DllSettings) -> Optional[ProcessModule]:
+        """
+        Retrieve a cached DLL module from the internal cache.
+
+        This method looks up the specified DLL from the internal DLL cache.
+        The cache is populated after successfully attaching to the process
+        (built by the _build_dll_cache method).
+
+        Args:
+            dll: DLL settings enum value (e.g., DllSettings.NEW_CLASSICS)
+
+        Returns:
+            ProcessModule object containing DLL name, path, and handle,
+            or None if not found or cache is empty
+        """
+        if self._dll_cache is not None:
+            return self._dll_cache.get(dll)
+        return None
 
     def get_dll_list(self, filter_name: Optional[str] = None) -> Dict[str, int]:
         """
@@ -278,13 +265,9 @@ class ProcessManager:
         Returns:
             Dictionary mapping module file paths to HMODULE values
         """
-        # Use cached list if available
-        if self._dll_list_cache is None:
-            # Build from scratch using already enumerated modules
-            modules = self.get_modules()
-            dll_list = self._build_dll_list_from_modules(modules)
-        else:
-            dll_list = self._dll_list_cache
+        # Build from scratch using already enumerated modules
+        modules = self.get_modules()
+        dll_list = self._build_dll_dict_from_modules(modules)
 
         if filter_name is not None:
             filter_lower = filter_name.lower()
@@ -295,53 +278,100 @@ class ProcessManager:
 
         return dll_list
 
-    def get_dll(self, name: str) -> Optional[int]:
+    def get_dll(self, name: str, exact_match: bool = False) -> Optional[int]:
         """
-        Find a specific DLL by name (case-insensitive substring match).
+        Find a specific DLL by name.
 
         Args:
-            name: The DLL name to search for (e.g., "divamodloader")
+            name: The DLL name to search for (e.g., "NewClassics.dll")
+            exact_match: If True, requires exact filename match; if False, uses substring match
 
         Returns:
-            HMODULE value (base address) of the found DLL
-
-        Raises:
-            DllNotFoundException: If the DLL is not found in the process
+            HMODULE value (base address) of the found DLL, or None if not found
         """
         name_lower = name.lower()
         dll_list = self.get_dll_list()
 
         for module_path, hmodule in dll_list.items():
-            if name_lower in module_path.lower():
-                return hmodule
+            if exact_match:
+                filename = Path(module_path).name.lower()
+                if filename == name_lower:
+                    return hmodule
+            else:
+                if name_lower in module_path.lower():
+                    return hmodule
 
         return None
 
-    def get_dll_info(self) -> List[dict]:
+    def _build_dll_cache(self, modules: List[int]) -> Dict[str, ProcessModule]:
         """
-        Get detailed information about all loaded modules.
+        Build DLL dictionary for caching from already enumerated module handles.
+        Only caches DLLs that are in the CACHED_DLLS whitelist and located in the game directory.
+
+        Args:
+            modules: List of HMODULE values from _enum_modules
 
         Returns:
-            List of dictionaries containing module information
+            Dictionary mapping names in CACHED_DLLS to dll module infos
         """
-        modules = []
+        output: Dict[str, ProcessModule] = {}
+        # 获取白名单
+        whitelist = [name for name in settings.CACHED_DLLS]
+
+        # 获取游戏路径
+        game_directory = settings.GAME_DIRECTORY
+
+        dll_list = self._build_dll_dict_from_modules(modules)
+        # 仅缓存白名单中的 DLL，且位于游戏路径下
+        for path, hmodule in dll_list.items():
+            dll_path = Path(path)
+            dll_name = dll_path.name
+
+            # 检查是否在游戏路径下（如果游戏路径已知）
+            if game_directory is not None:
+                try:
+                    # 检查 dll_path 是否在游戏目录下
+                    dll_path.resolve().relative_to(game_directory.resolve())
+                except ValueError:
+                    # 不在游戏目录下，跳过
+                    continue
+
+            for white in whitelist:
+                if white == dll_name:
+                    module = ProcessModule(
+                        name=dll_name,
+                        path=dll_path,
+                        hmodule=hmodule
+                    )
+                    output[white] = module
+                    logger.debug(f"Cached DLL: {path} at 0x{hmodule:08X}")
+                    break
+
+        return output
+
+    def _build_dll_dict_from_modules(self, modules: List[int]) -> Dict[str, int]:
+        """
+        Build DLL dictionary from already enumerated module handles.
+
+        Args:
+            modules: List of HMODULE values from _enum_modules
+
+        Returns:
+            Dictionary mapping module file paths to HMODULE values
+        """
+        output: Dict[str, int] = {}
         psapi = ctypes.windll.psapi
 
-        for hmodule in self.get_modules():
-            # Get module file name
-            path_buffer = ctypes.create_unicode_buffer(1024)
+        for hmodule in modules:
+            path_buffer = ctypes.create_unicode_buffer(32767)  # Maximum extended path length
             size = psapi.GetModuleFileNameExW(
                 self._process_handle,
-                hmodule,
+                wintypes.HMODULE(hmodule),
                 path_buffer,
-                1024
+                wintypes.DWORD(32767)
             )
-
             if size > 0:
-                modules.append({
-                    "path": path_buffer.value,
-                    "base_address": hmodule,
-                    "base_address_hex": f"0x{hmodule:08X}"
-                })
+                path = path_buffer.value
+                output[path] = hmodule
 
-        return modules
+        return output

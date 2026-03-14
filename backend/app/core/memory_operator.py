@@ -2,8 +2,10 @@
 import ctypes
 from ctypes import wintypes
 from typing import Optional, Tuple
+
+from app.models.process_module import ProcessModule
 from app.utils.logger import logger
-from app.config import settings
+from app.config import settings, DllSettings
 
 
 class MemoryOperator:
@@ -49,7 +51,7 @@ class MemoryOperator:
 
         # Read the value at LAST_SELECT_PVID_ADDR (0x12B6350) and avoid triggering eden_offset property again
         check_addr = settings.LAST_SELECT_PVID_ADDR
-        value = self.read_int32(check_addr, use_offset=True, skip_eden=True)
+        value = self.read_int(check_addr, use_offset=True)
 
         if value is None:
             logger.warning(f"Eden detection: check_addr=0x{check_addr:08X}, FAILED to read value (None)")
@@ -68,38 +70,69 @@ class MemoryOperator:
 
         self._pm.set_eden_checked()
 
-    def _get_data_address(self, base_addr: int, skip_eden: bool = False) -> int:
+    def _get_data_address(
+        self,
+        base_addr: int,
+        apply_eden: bool = False,
+        dll: Optional[DllSettings] = None
+    ) -> int:
         """
-        Get the actual data address, accounting for base address and Eden offset.
-        Control addresses are not affected by base address or Eden offset.
+        计算实际内存地址
 
         Args:
-            base_addr: The base address from configuration
-            skip_eden: If True, skip adding Eden offset (used during Eden detection)
+            base_addr: 基础地址或偏移量
+            apply_eden: 是否使用 Eden 偏移
+            dll: 若指定，则 base_addr 视为该 DLL 的偏移量
+
+        当指定 dll 时:
+            最终地址 = DLL 基址 + base_addr (作为偏移)
+            忽略进程基址和 Eden 偏移
+
+        未指定 dll 时:
+            最终地址 = base_addr + 进程基址 + Eden 偏移
         """
+        # DLL 模式：忽略其他偏移，只计算 DLL 偏移
+        if dll is not None:
+            dll_base: Optional[ProcessModule] = self._pm.get_cached_dll(dll)
+            if dll_base is None:
+                raise RuntimeError(f"DLL '{dll}' not found in process")
+
+            result = dll_base.hmodule + base_addr
+            logger.debug(
+                f"DLL address calculation: {dll} "
+                f"base=0x{dll_base.hmodule:08X}, offset=0x{base_addr:X}, "
+                f"result=0x{result:08X}"
+            )
+            return result
+
+        # 标准模式：原有的计算逻辑
         eden_offset = 0
-        if not skip_eden and base_addr:
-            # Use _eden_offset directly to avoid triggering detection
+        if apply_eden and base_addr:
             eden_offset += self.eden_offset or 0
 
-        # Control addresses (CHANGE_SONG_SELECT, START_CHANGE) are absolute addresses
-        if base_addr in [settings.CHANGE_SONG_SELECT_ADDR, settings.START_CHANGE_ADDR]:
-            eden_offset = 0
-
         base = self._pm.base_address or 0
-
-        # Data addresses: base + offset + eden_offset
         result = base_addr + base + eden_offset
-        logger.debug(f"Applying offset: 0x{base_addr:08X} -> 0x{result:08X} (+{base} +{eden_offset})")
+
+        logger.debug(f"Standard address: 0x{base_addr:08X} -> 0x{result:08X} (+{base} +{eden_offset})")
         return result
 
-    def read_memory(self, address: int, size: int) -> Optional[bytes]:
+    def read_memory(
+        self,
+        address: int,
+        size: int,
+        use_offset: bool = True,
+        apply_eden: bool = False,
+        dll: Optional[DllSettings] = None
+    ) -> Optional[bytes]:
         """
         Read raw bytes from process memory.
 
         Args:
-            address: Memory address to read from
+            address: Memory address to read from (or DLL offset if dll is specified)
             size: Number of bytes to read
+            use_offset: If True, apply address calculations (base/eden/dll). Set to False when entering an absolute address
+            apply_eden: If True, apply Eden offset calculation
+            dll: If specified, address is treated as an offset from this DLL's base
 
         Returns:
             Bytes read, or None if failed
@@ -108,13 +141,22 @@ class MemoryOperator:
         if not handle:
             return None
 
+        # Calculate actual address if needed
+        actual_address = address
+        if use_offset:
+            try:
+                actual_address = self._get_data_address(address, apply_eden=apply_eden, dll=dll)
+            except RuntimeError as e:
+                logger.error(f"Failed to calculate address: {e}")
+                return None
+
         kernel32 = ctypes.windll.kernel32
         buffer = ctypes.create_string_buffer(size)
         bytes_read = ctypes.c_size_t(0)
 
         success = kernel32.ReadProcessMemory(
             handle,
-            ctypes.c_void_p(address),
+            ctypes.c_void_p(actual_address),
             buffer,
             size,
             ctypes.byref(bytes_read)
@@ -122,7 +164,7 @@ class MemoryOperator:
 
         if not success:
             error = kernel32.GetLastError()
-            logger.error(f"ReadProcessMemory failed at 0x{address:08X}, error: {error}")
+            logger.error(f"ReadProcessMemory failed at 0x{actual_address:08X}, error: {error}")
             if error == 5:
                 logger.error("错误代码5: 访问被拒绝 - 请以管理员身份运行后端")
             elif error == 6:
@@ -133,13 +175,23 @@ class MemoryOperator:
 
         return buffer.raw[:bytes_read.value]
 
-    def write_memory(self, address: int, data: bytes) -> bool:
+    def write_memory(
+        self,
+        address: int,
+        data: bytes,
+        use_offset: bool = True,
+        apply_eden: bool = False,
+        dll: Optional[DllSettings] = None
+    ) -> bool:
         """
         Write raw bytes to process memory.
 
         Args:
-            address: Memory address to write to
+            address: Memory address to write to (or DLL offset if dll is specified)
             data: Bytes to write
+            use_offset: If True, apply address calculations (base/eden/dll). Set to False when entering an absolute address
+            apply_eden: If True, apply Eden offset calculation
+            dll: If specified, address is treated as an offset from this DLL's base
 
         Returns:
             True if successful, False otherwise
@@ -147,6 +199,15 @@ class MemoryOperator:
         handle = self._get_handle()
         if not handle:
             return False
+
+        # Calculate actual address if needed
+        actual_address = address
+        if use_offset:
+            try:
+                actual_address = self._get_data_address(address, apply_eden=apply_eden, dll=dll)
+            except RuntimeError as e:
+                logger.error(f"Failed to calculate address: {e}")
+                return False
 
         kernel32 = ctypes.windll.kernel32
         buffer = ctypes.create_string_buffer(data)
@@ -158,7 +219,7 @@ class MemoryOperator:
 
         success = kernel32.VirtualProtectEx(
             handle,
-            ctypes.c_void_p(address),
+            ctypes.c_void_p(actual_address),
             size,
             0x40,  # PAGE_EXECUTE_READWRITE
             ctypes.byref(old_protect)
@@ -166,13 +227,13 @@ class MemoryOperator:
 
         if not success:
             error = kernel32.GetLastError()
-            logger.warning(f"VirtualProtectEx failed at 0x{address:08X}, error: {error}")
+            logger.warning(f"VirtualProtectEx failed at 0x{actual_address:08X}, error: {error}")
             return False
 
         try:
             success = kernel32.WriteProcessMemory(
                 handle,
-                ctypes.c_void_p(address),
+                ctypes.c_void_p(actual_address),
                 buffer,
                 size,
                 ctypes.byref(bytes_written)
@@ -180,7 +241,7 @@ class MemoryOperator:
 
             if not success:
                 error = kernel32.GetLastError()
-                logger.error(f"WriteProcessMemory failed at 0x{address:08X}, error: {error}")
+                logger.error(f"WriteProcessMemory failed at 0x{actual_address:08X}, error: {error}")
                 return False
 
             return True
@@ -189,7 +250,7 @@ class MemoryOperator:
             # Restore original protection
             kernel32.VirtualProtectEx(
                 handle,
-                ctypes.c_void_p(address),
+                ctypes.c_void_p(actual_address),
                 size,
                 old_protect.value,
                 ctypes.byref(old_protect)
@@ -198,96 +259,63 @@ class MemoryOperator:
     def read_int(
             self,
             address: int,
-            size: int,
-            signed: bool = True,
+            size: int = 4,
+            signed: bool = False,
             use_offset: bool = True,
-            skip_eden: bool = False
+            apply_eden: bool = False,
+            dll: Optional[DllSettings] = None
     ) -> Optional[int]:
-        """Read an arbitrary integer from memory."""
-        original_address = address
-        logger.debug(f"Handling raw address: 0x{address:08X}")
-        if use_offset:
-            address = self._get_data_address(address, skip_eden=skip_eden)
+        """
+        Read an arbitrary integer from memory.
 
-        data = self.read_memory(address, size)
+        Args:
+            address: Memory address (or DLL offset if dll is specified)
+            size: Number of bytes to read
+            signed: Whether the integer is signed
+            use_offset: If True, apply address calculations (base/eden/dll). Set to False when entering an absolute address
+            apply_eden: If True, apply Eden offset
+            dll: If specified, address is treated as an offset from this DLL's base
+        """
+        logger.debug(f"Reading int from address: 0x{address:08X}, size={size}, dll={dll}")
+
+        data = self.read_memory(address, size, use_offset=use_offset, apply_eden=apply_eden, dll=dll)
         if data is None:
             return None
         return int.from_bytes(data, byteorder='little', signed=signed)
 
-    def read_int32(
-            self,
-            address: int,
-            signed: bool = True,
-            use_offset: bool = True,
-            skip_eden: bool = False
-    ) -> Optional[int]:
-        """Read a 32-bit integer from memory."""
-        original_address = address
-        logger.debug(f"Handling raw address: 0x{address:08X}")
-        if use_offset:
-            address = self._get_data_address(address, skip_eden=skip_eden)
-
-        data = self.read_memory(address, 4)
-        if data is None:
-            return None
-        return int.from_bytes(data, byteorder='little', signed=signed)
-
-    def read_int8(
-            self,
-            address: int,
-            signed: bool = True,
-            use_offset: bool = True,
-            skip_eden: bool = False
-    ) -> Optional[int]:
-        """Read an 8-bit integer from memory."""
-        original_address = address
-        logger.debug(f"Handling raw address: 0x{address:08X}")
-        if use_offset:
-            address = self._get_data_address(address, skip_eden=skip_eden)
-
-        data = self.read_memory(address, 1)
-        if data is None:
-            return None
-        return int.from_bytes(data, byteorder='little', signed=signed)
-
-    def write_int32(
+    def write_int(
             self,
             address: int,
             value: int,
-            signed: bool = True,
+            size: int = 4,
+            signed: bool = False,
             use_offset: bool = True,
-            skip_eden: bool = False
+            apply_eden: bool = False,
+            dll: Optional[DllSettings] = None
     ) -> bool:
-        """Write a 32-bit integer to memory."""
-        logger.debug(f"Handling raw address: 0x{address:08X}")
-        if use_offset:
-            address = self._get_data_address(address, skip_eden=skip_eden)
+        """
+        Write a 32-bit integer to memory.
 
-        data = value.to_bytes(4, byteorder='little', signed=signed)
-        return self.write_memory(address, data)
+        Args:
+            address: Memory address (or DLL offset if dll is specified)
+            value: The integer value to write
+            size: Number of bytes to write
+            signed: Whether the integer is signed
+            use_offset: If True, apply address calculations (base/eden/dll). Set to False when entering an absolute address
+            apply_eden: If True, apply Eden offset
+            dll: If specified, address is treated as an offset from this DLL's base
+        """
+        logger.debug(f"Writing int to address: 0x{address:08X}, value={value}, size={size}, dll={dll}")
 
-    def write_int8(
-            self,
-            address: int,
-            value: int,
-            signed: bool = True,
-            use_offset: bool = True,
-            skip_eden: bool = False
-    ) -> bool:
-        """Write an 8-bit integer to memory."""
-        logger.debug(f"Handling raw address: 0x{address:08X}")
-        if use_offset:
-            address = self._get_data_address(address, skip_eden=skip_eden)
-
-        data = value.to_bytes(1, byteorder='little', signed=signed)
-        return self.write_memory(address, data)
+        data = value.to_bytes(size, byteorder='little', signed=signed)
+        return self.write_memory(address, data, use_offset=use_offset, apply_eden=apply_eden, dll=dll)
 
     def get_game_state(self) -> Optional[int]:
         """
         Read the current game state.
         Returns the value from the START_CHANGE address.
         """
-        return self.read_int32(settings.START_CHANGE_ADDR, skip_eden=True)
+        return self.read_int(settings.START_CHANGE_ADDR)
 
     def get_last_selection(self) -> Tuple[Optional[int], Optional[int], Optional[int]]:
         """
@@ -296,10 +324,10 @@ class MemoryOperator:
         Returns:
             Tuple of (pvid, sort_id, difficulty) or (None, None, None) if failed
         """
-        pvid = self.read_int32(settings.LAST_SELECT_PVID_ADDR)
-        sort_id = self.read_int32(settings.LAST_SELECT_SORT_ADDR)
-        diff_type = self.read_int32(settings.LAST_SELECT_DIFF_TYPE_ADDR)
-        diff_level = self.read_int32(settings.LAST_SELECT_DIFF_LEVEL_ADDR)
+        pvid = self.read_int(settings.LAST_SELECT_PVID_ADDR, apply_eden=True)
+        sort_id = self.read_int(settings.LAST_SELECT_SORT_ADDR, apply_eden=True)
+        diff_type = self.read_int(settings.LAST_SELECT_DIFF_TYPE_ADDR, apply_eden=True)
+        diff_level = self.read_int(settings.LAST_SELECT_DIFF_LEVEL_ADDR, apply_eden=True)
 
         logger.debug(f"pvid: {pvid}, sort_id: {sort_id}, diff_type: {diff_type}, diff_level: {diff_level}")
 

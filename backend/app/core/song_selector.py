@@ -20,7 +20,7 @@ from enum import Enum
 from typing import Optional, Tuple
 from app.models.song import Song, DifficultyType
 from app.utils.logger import logger
-from app.config import settings
+from app.config import settings, DllSettings
 
 
 class SwitchMode(Enum):
@@ -70,7 +70,7 @@ class SongSelector:
 
         # Read CHANGE_SONG_SELECT value (0xCC61098)
         # Per spec: Control addresses are NOT affected by Eden offset
-        change_song_select = self._mem.read_int32(settings.CHANGE_SONG_SELECT_ADDR, skip_eden=True)
+        change_song_select = self._mem.read_int(settings.CHANGE_SONG_SELECT_ADDR)
         if change_song_select is None:
             logger.warning("Failed to read CHANGE_SONG_SELECT, game may not be running")
             return None
@@ -146,12 +146,12 @@ class SongSelector:
             # Step 4: Initialize switch
             logger.debug("Step 4: Initialize switch")
             # Write CHANGE_SONG_SELECT = 6 (switch to Custom playlists)
-            if not self._mem.write_int8(settings.CHANGE_SONG_SELECT_ADDR, 6, skip_eden=True):
+            if not self._mem.write_int(settings.CHANGE_SONG_SELECT_ADDR, 6):
                 logger.error("Failed to set CHANGE_SONG_SELECT = 6")
                 return False
 
             # Write START_CHANGE = 2 (triggering menu switch)
-            if not self._mem.write_int8(settings.START_CHANGE_ADDR, 2, skip_eden=True):
+            if not self._mem.write_int(settings.START_CHANGE_ADDR, 2):
                 logger.error("Failed to set START_CHANGE = 2")
                 return False
 
@@ -162,36 +162,46 @@ class SongSelector:
             # Step 6: Prepare data (selectPV)
             logger.debug("Step 6: Prepare song data")
             # Write difficulty type first (per spec order)
-            if not self._mem.write_int32(settings.LAST_SELECT_DIFF_TYPE_ADDR, difficulty.value):
+            if not self._mem.write_int(settings.LAST_SELECT_DIFF_TYPE_ADDR, difficulty.value, apply_eden=True):
                 logger.error("Failed to write DIFF_TYPE")
                 return False
 
             # Write PVID (song ID)
-            if not self._mem.write_int32(settings.LAST_SELECT_PVID_ADDR, song.id):
+            if not self._mem.write_int(settings.LAST_SELECT_PVID_ADDR, song.id, apply_eden=True):
                 logger.error("Failed to write PVID")
                 return False
+
+            # Set game mode (Arcade or Console)
+            if console:
+                if not self._mem.write_int(settings.CONSOLE_MODE_CHANGE_ADDR, 1, dll=DllSettings.NEW_CLASSICS):
+                    logger.error("Failed to write CONSOLE_MODE")
+                    return False
+            else:
+                if not self._mem.write_int(settings.CONSOLE_MODE_CHANGE_ADDR, 0, dll=DllSettings.NEW_CLASSICS):
+                    logger.error("Failed to write CONSOLE_MODE")
+                    return False
 
             # Step 7: Set sort (selectSort)
             logger.debug("Step 7: Set sort")
             # Write LAST_SELECT_SORT_ADDR = 1 (sort by difficulty level)
-            if not self._mem.write_int32(settings.LAST_SELECT_SORT_ADDR, 1):
+            if not self._mem.write_int(settings.LAST_SELECT_SORT_ADDR, 1, apply_eden=True):
                 logger.error("Failed to write SORT")
                 return False
 
             # Write LAST_SELECT_DIFF_LEVEL_ADDR = 19 (difficulty level = ALL)
-            if not self._mem.write_int32(settings.LAST_SELECT_DIFF_LEVEL_ADDR, 19):
+            if not self._mem.write_int(settings.LAST_SELECT_DIFF_LEVEL_ADDR, 19, apply_eden=True):
                 logger.error("Failed to write DIFF_LEVEL")
                 return False
 
             # Step 8: Trigger switch
             logger.debug("Step 8: Trigger switch")
             # Write CHANGE_SONG_SELECT = 5 (switch to Rhythm Game)
-            if not self._mem.write_int8(settings.CHANGE_SONG_SELECT_ADDR, 5, skip_eden=True):
+            if not self._mem.write_int(settings.CHANGE_SONG_SELECT_ADDR, 5):
                 logger.error("Failed to set CHANGE_SONG_SELECT = 5")
                 return False
 
             # Write START_CHANGE = 2 (triggering menu switch)
-            if not self._mem.write_int8(settings.START_CHANGE_ADDR, 2, skip_eden=True):
+            if not self._mem.write_int(settings.START_CHANGE_ADDR, 2):
                 logger.error("Failed to set START_CHANGE = 2")
                 return False
 
@@ -222,21 +232,31 @@ class SongSelector:
             logger.debug("Delayed mode: Updating data only")
 
             # selectPV: Write difficulty type first, then PVID (per spec section 5.2 step 6)
-            if not self._mem.write_int32(settings.LAST_SELECT_DIFF_TYPE_ADDR, difficulty.value):
+            if not self._mem.write_int(settings.LAST_SELECT_DIFF_TYPE_ADDR, difficulty.value, apply_eden=True):
                 logger.error("Delayed mode: Failed to write DIFF_TYPE")
                 return False
 
-            if not self._mem.write_int32(settings.LAST_SELECT_PVID_ADDR, song.id):
+            if not self._mem.write_int(settings.LAST_SELECT_PVID_ADDR, song.id, apply_eden=True):
                 logger.error("Delayed mode: Failed to write PVID")
                 return False
 
+            # Set game mode (Arcade or Console)
+            if console:
+                if not self._mem.write_int(settings.CONSOLE_MODE_CHANGE_ADDR, 1, dll=DllSettings.NEW_CLASSICS):
+                    logger.error("Delayed mode: Failed to write CONSOLE_MODE")
+                    return False
+            else:
+                if not self._mem.write_int(settings.CONSOLE_MODE_CHANGE_ADDR, 0, dll=DllSettings.NEW_CLASSICS):
+                    logger.error("Delayed mode: Failed to write CONSOLE_MODE")
+                    return False
+
             # Write LAST_SELECT_SORT_ADDR = 1 (sort by difficulty level)
-            if not self._mem.write_int32(settings.LAST_SELECT_SORT_ADDR, 1):
+            if not self._mem.write_int(settings.LAST_SELECT_SORT_ADDR, 1, apply_eden=True):
                 logger.error("Delayed mode: Failed to write SORT")
                 return False
 
             # Write LAST_SELECT_DIFF_LEVEL_ADDR = 19 (difficulty level = ALL)
-            if not self._mem.write_int32(settings.LAST_SELECT_DIFF_LEVEL_ADDR, 19):
+            if not self._mem.write_int(settings.LAST_SELECT_DIFF_LEVEL_ADDR, 19, apply_eden=True):
                 logger.error("Delayed mode: Failed to write DIFF_LEVEL")
                 return False
 
@@ -267,7 +287,7 @@ class SongSelector:
                            None if cannot read memory
         """
         # Read game state to determine if player is in-game
-        curr_pvid_base_addr = self._mem.read_int(settings.CURR_PVID_BASE_PTR_ADDR, 8, signed=False, skip_eden=True)
+        curr_pvid_base_addr = self._mem.read_int(settings.CURR_PVID_BASE_PTR_ADDR, size=8)
         if curr_pvid_base_addr is None:
             logger.warning("Failed to read CURR_PVID_BASE_PTR_ADDR, game may not be running")
             return None, None
@@ -280,22 +300,21 @@ class SongSelector:
         if curr_pvid_base_addr == self.STATE_INGAME:
             current_pvid_addr = settings.CURR_PVID_INGAME_ADDR
             is_ingame = True
+            use_offset = True
         else:
-            curr_pvid_song_selection_offset = self._mem.read_int32(
-                settings.CURR_PVID_SONG_SELECTION_OFFSET_PTR_ADDR,
-                signed=False,
-                skip_eden=True
-            ) - settings.CURR_PVID_SONG_SELECTION_OFFSET_PTR_OFFSET
+            curr_pvid_song_selection_offset = (self._mem.read_int(settings.CURR_PVID_SONG_SELECTION_OFFSET_PTR_ADDR)
+                                               - settings.CURR_PVID_SONG_SELECTION_OFFSET_PTR_OFFSET)
             if curr_pvid_song_selection_offset is None:
                 logger.warning("Failed to read CURR_PVID_SONG_SELECTION_OFFSET, game may not be running")
                 return None, None
 
             current_pvid_addr = curr_pvid_base_addr + curr_pvid_song_selection_offset
             is_ingame = False
+            use_offset = False
             logger.debug(f"CURR_PVID_ADDR: 0x{current_pvid_addr:08X} = 0x{curr_pvid_base_addr:08X} + 0x{curr_pvid_song_selection_offset:08X}")
 
         # Read the current PVID from the determined address
-        current_pvid = self._mem.read_int32(current_pvid_addr, signed=False, skip_eden=True, use_offset=is_ingame)
+        current_pvid = self._mem.read_int(current_pvid_addr, use_offset=use_offset)
         if current_pvid is None:
             logger.warning(f"Failed to read CURR_PVID_BASE_ADDR 0x{curr_pvid_base_addr:08X}, "
                            f"game may not be running or not in the right state")
