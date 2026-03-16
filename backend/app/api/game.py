@@ -29,7 +29,7 @@ def _build_current_song_info(song) -> CurrentSongInfo:
 
     # Build difficulty info with enabled status
     difficulty_infos = []
-    for d in song.difficulty_details:
+    for d in song.chart_infos:
         # Original difficulty is always enabled
         if d.is_original:
             is_difficulty_enabled = True

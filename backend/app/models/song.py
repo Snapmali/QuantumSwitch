@@ -1,10 +1,15 @@
 """Song data models."""
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Optional, Set
+from typing import Optional, Set, List
 
 from app.models.mod_info import ModInfo
 
+class ChartStyle(Enum):
+    """NC difficulty style types."""
+    ARCADE = "ARCADE"
+    CONSOLE = "CONSOLE"
+    MIXED = "Mixed"
 
 class DifficultyType(Enum):
     """Difficulty types for songs."""
@@ -43,17 +48,28 @@ class DifficultyType(Enum):
 
 
 @dataclass
-class DifficultyInfo:
-    """Difficulty information with level and script path."""
+class ChartInfo:
+    """Chart information with level and script path."""
+    style: Optional[ChartStyle]
     type: DifficultyType
     level: float = 0.0  # 星级 1-20，支持小数如 6.5
     edition: int = 0
-    script_path: Optional[str] = None
+    script_file_name: Optional[str] = None
     is_extra: bool = False  # 是否为 EXTRA EXTREME
     is_original: bool = False  # 是否为原谱
     is_slide: bool = False  # 是否为滑动谱
     index: int = 0  # 同类型难度的索引，用于区分多个 EXTREME
-    mod_ids: Set[int] = field(default_factory=set)  # 来源 Mod ID 集合
+    mod_ids: Set[int] = field(default_factory=set)  # 来源 Mod ID 集合（已弃用）
+    mod_id: int = None # 来源 Mod ID
+
+
+@dataclass
+class NcChartInfo:
+    """NC database difficulty entry."""
+    difficulty_type: DifficultyType  # "easy", "normal", "hard", "extreme", "ex_extreme"
+    style: ChartStyle
+    level: Optional[float] = None  # Parsed from PV_LV_WW_D
+    script_file_name: Optional[str] = None
 
 
 @dataclass
@@ -65,10 +81,8 @@ class Song:
     name_en: Optional[str] = None  # 英文名称
     name_reading: Optional[str] = None  # 读音/假名
     difficulties: list[DifficultyType] = field(default_factory=list)
-    difficulty_details: list[DifficultyInfo] = field(default_factory=list)
+    chart_infos: list[ChartInfo] = field(default_factory=list)
     hidden: bool = False
-    source_file: Optional[str] = None
-    mod_path: Optional[str] = None  # 所属Mod路径
 
     # Optional metadata from PVDB
     bpm: Optional[str] = None
@@ -84,7 +98,6 @@ class Song:
     pv_editor: Optional[str] = None  # PV编辑
 
     # Mod information
-    mod_info: Optional[ModInfo] = None  # 歌曲来源 Mod 信息（单个，用于向后兼容）
     mod_infos: list[ModInfo] = field(default_factory=list)  # 歌曲关联的所有 Mod 信息列表
     mod_enabled: bool = True  # Mod 是否启用（影响歌曲是否可用）
     is_vanilla: bool = False  # 是否为原版歌曲（来自 data/vanilla 目录）
@@ -109,9 +122,9 @@ class Song:
         """Check if song has the specified difficulty."""
         return difficulty in self.difficulties
 
-    def get_difficulty_info(self, difficulty: DifficultyType) -> Optional[DifficultyInfo]:
+    def get_difficulty_info(self, difficulty: DifficultyType) -> Optional[ChartInfo]:
         """Get detailed info for a specific difficulty."""
-        for info in self.difficulty_details:
+        for info in self.chart_infos:
             if info.type == difficulty:
                 return info
         return None
@@ -147,14 +160,14 @@ class Song:
                     "name": d.type.display_name,
                     "level": d.level,
                     "edition": d.edition,
-                    "scriptPath": d.script_path,
+                    "scriptPath": d.script_file_name,
                     "isExtra": d.is_extra,
                     "isOriginal": d.is_original,
                     "isSlide": d.is_slide,
                     "index": d.index,
                     "modIds": list(d.mod_ids),  # set 转 list
                 }
-                for d in self.difficulty_details
+                for d in self.chart_infos
             ],
             "hidden": self.hidden,
             "modPath": self.mod_path,
@@ -195,3 +208,36 @@ class Song:
         """Get star level for a difficulty."""
         info = self.get_difficulty_info(difficulty)
         return info.level if info else 0.0
+
+
+@dataclass
+class NcSong:
+    """NC database song entry."""
+    song_id: int
+    chart_infos: List[NcChartInfo] = field(default_factory=list)
+    source_file: Optional[str] = None
+    mod_id: Optional[int] = None
+
+
+diff_type_mapping = {
+        'easy': DifficultyType.EASY,
+        'normal': DifficultyType.NORMAL,
+        'hard': DifficultyType.HARD,
+        'extreme': DifficultyType.EXTREME,
+        'extra_extreme': DifficultyType.EXTRA_EXTREME,
+        'ex_extreme': DifficultyType.EXTRA_EXTREME,
+        'extraextreme': DifficultyType.EXTRA_EXTREME,
+        'exextreme': DifficultyType.EXTRA_EXTREME,
+    }
+
+nc_diff_type_mapping = {
+                'easy': DifficultyType.EASY,
+                'normal': DifficultyType.NORMAL,
+                'hard': DifficultyType.HARD,
+                'extreme': DifficultyType.EXTREME,
+                'ex_extreme': DifficultyType.EXTRA_EXTREME,
+            }
+
+def parse_difficulty_type(name: str):
+    """Parse difficulty type name to enum."""
+    return diff_type_mapping.get(name.lower())

@@ -1,5 +1,5 @@
 from .mod_info import ModInfo
-from .song import Song, DifficultyType, DifficultyInfo
+from .song import Song, NcSong, ChartInfo, NcChartInfo, DifficultyType, ChartStyle
 from .schemas import (
     SongResponse,
     SongListResponse,
@@ -18,7 +18,10 @@ __all__ = [
     "ModInfo",
     "Song",
     "DifficultyType",
-    "DifficultyInfo",
+    "ChartInfo",
+    "NcSong",
+    "NcChartInfo",
+    "ChartStyle",
     "SongResponse",
     "SongListResponse",
     "GameStatusResponse",

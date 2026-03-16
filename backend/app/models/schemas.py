@@ -72,7 +72,7 @@ class SongResponse(BaseModel):
 
         # Build difficulty details with enabled status
         difficulty_details = []
-        for d in song.difficulty_details:
+        for d in song.chart_infos:
             # Original difficulty is always enabled
             if d.is_original:
                 is_difficulty_enabled = True
@@ -89,7 +89,7 @@ class SongResponse(BaseModel):
                     name=d.type.display_name,
                     level=d.level,
                     edition=d.edition,
-                    scriptPath=d.script_path,
+                    scriptPath=d.script_file_name,
                     isExtra=d.is_extra,
                     isOriginal=d.is_original,
                     isSlide=d.is_slide,
