@@ -8,9 +8,12 @@
 
 Quantum Switch 是一个用于 Hatsune Miku: Project DIVA Mega Mix+ 的网页版歌曲切换工具，可以通过浏览器快速选择并跳转到游戏中的任意歌曲。
 
+支持在Arcade、Console、Mixed风格间切换。
+
 ## 特别感谢
 
-- 使用了 hiki8man 的 [Select Song with PVID](https://gamebanana.com/tools/21051) 项目的原版歌曲 mod_pv_db，特别感谢大佬对相关地址的开源和逻辑讲解，对工程落地提供了很大帮助
+- 特别感谢 萌新安定 大佬对相关内存地址的开源和逻辑讲解，对工程落地提供了很大帮助
+- 使用了 hiki8man 的 [Select Song with PVID](https://gamebanana.com/tools/21051) 项目的原版歌曲 mod_pv_db
 - 感谢 sasnchis 的 [DivaSongViewer](https://gamebanana.com/tools/18296) 项目，本项目中歌曲切换核心逻辑、mod_pv_db 解析逻辑大量参考 DivaSongViewer 开源项目
 - Project DIVA Mega Mix+ 社区，GameBanana 的 [mod_pv_db 结构说明](https://gamebanana.com/tuts/15681#H1_13)
 - 各路 AI，没这个办不成事
@@ -29,7 +32,54 @@ Quantum Switch 是一个用于 Hatsune Miku: Project DIVA Mega Mix+ 的网页版
 
 ---
 
-## 快速安装
+## 使用已构建版本
+
+如果你已经下载了构建好的版本（包含 `QuantumSwitch.exe`），按以下步骤部署：
+
+### 1. 部署
+
+1. 解压 `QuantumSwitch` 文件夹到任意位置
+2. 进入 `config` 文件夹，复制 `.env.template` 为 `.env`
+3. 编辑 `.env` 配置文件
+
+### 2. 配置文件说明
+
+`.env` 文件支持的配置项：
+
+```env
+# Mods 目录路径（不填则自动检测）
+GAME_MODS_DIRECTORY='C:\Path\To\mods'
+
+# 服务器绑定地址（默认 127.0.0.1，可选 0.0.0.0）
+HOST=127.0.0.1
+
+# 服务器端口（默认 8000）
+PORT=8000
+
+# 调试模式（默认 false）
+DEBUG=false
+
+# 游戏进程名（通常不需要修改）
+GAME_PROCESS_NAME=DivaMegaMix.exe
+```
+
+### 3. 使用流程
+
+**步骤 1：启动游戏**
+
+先启动 Project DIVA MegaMix+，进入主菜单或歌曲选择界面。
+
+**步骤 2：启动 Quantum Switch**
+
+双击运行 `QuantumSwitch.exe`。
+
+**步骤 3：打开网页界面**
+
+在浏览器中访问 http://localhost:8000
+
+---
+
+## 从源码开始
 
 ### 1. 获取代码
 
@@ -121,8 +171,6 @@ python start.py
 
 ## 构建独立可执行文件
 
-如果你想分发给别人使用，或者不想安装 Python 环境，可以打包成独立的 exe 程序。
-
 ### 准备工作
 
 确保已安装：
@@ -149,71 +197,7 @@ QuantumSwitch/
 └── icon.ico             # 程序图标
 ```
 
-### 部署步骤
-
-1. 将 `QuantumSwitch` 文件夹复制到目标电脑
-2. 进入 `config` 文件夹，复制 `.env.template` 为 `.env`
-3. 编辑 `.env`，设置正确的 `GAME_MODS_DIRECTORY` 路径
-4. 运行 `QuantumSwitch.exe`
-5. 用浏览器访问 http://localhost:8000
-
----
-
-## 使用流程
-
-### 1. 启动游戏
-
-先启动 Project DIVA MegaMix+，进入主菜单或歌曲选择界面。
-
-### 2. 启动 Quantum Switch
-
-运行 `python start.py`（开发/生产模式）或双击 `QuantumSwitch.exe`（打包版本）。
-
-### 3. 打开网页界面
-
-在浏览器中访问对应地址：
-- 生产模式：http://localhost:8000
-- 开发模式：http://localhost:5173
-
-### 4. 切换歌曲
-
-1. 在网页上浏览歌曲列表，可使用搜索功能快速查找
-2. 点击想要切换的歌曲
-3. 选择难度（EASY/NORMAL/HARD/EXTREME/EXTRA EXTREME）
-4. 点击"切换到游戏"
-
-### 5. 游戏内确认
-
-根据你当前在游戏中的位置，切换行为有所不同：
-
-| 游戏状态 | 切换行为 |
-|----------|----------|
-| 歌曲选择界面 | 立即跳转到指定歌曲 |
-| PV 选择/其他界面 | 数据已写入，按空格键后生效 |
-| 游戏中 | 需先返回菜单才能切换 |
-
----
-
-## 配置文件说明
-
-`.env` 文件支持的配置项：
-
-```env
-# Mods 目录路径（不填则自动检测）
-GAME_MODS_DIRECTORY='C:\Path\To\mods'
-
-# 服务器绑定地址（默认 127.0.0.1）
-HOST=127.0.0.1
-
-# 服务器端口（默认 8000）
-PORT=8000
-
-# 调试模式（默认 false）
-DEBUG=false
-
-# 游戏进程名（通常不需要修改）
-GAME_PROCESS_NAME=DivaMegaMix.exe
-```
+将 `QuantumSwitch` 文件夹复制到目标电脑即可部署使用。详见上方【使用已构建版本】章节。
 
 ---
 
@@ -270,14 +254,14 @@ GAME_PROCESS_NAME=DivaMegaMix.exe
 
 ### 后端
 - **Python 3.11+**
-- **FastAPI** - 高性能异步 Web 框架
+- **FastAPI** - Web 框架
 - **Pydantic** - 数据验证和序列化
 - **pywin32** - Windows API 内存操作
 - **loguru** - 日志记录
 
 ### 前端
-- **Vue 3** - 渐进式 JavaScript 框架
-- **TypeScript** - 类型安全的 JavaScript 超集
+- **TypeScript**
+- **Vue 3**
 - **Element Plus** - Vue 3 组件库
 - **Pinia** - 状态管理
 - **Vite** - 构建工具
@@ -342,7 +326,7 @@ QuantumSwitch/
 
 ## 另外致谢
 
-- Claude Code
+- Claude Code for vibe coding
 - Kimi K2.5
 - Nano Banana 2 for icon
 - [FastAPI](https://fastapi.tiangolo.com/)
