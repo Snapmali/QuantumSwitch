@@ -3,7 +3,7 @@ import { ref, computed, watch } from 'vue'
 import type { Song } from '@/types'
 import { Search, Refresh, Star, StarFilled } from '@element-plus/icons-vue'
 import { debounce } from 'lodash-es'
-import { getDifficultyStyle, getDifficultyShortLabel, getDifficultyDisabledStyle } from '@/types'
+import { getDifficultyStyle } from '@/types'
 
 const props = defineProps<{
   songs: Song[]

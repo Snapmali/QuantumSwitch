@@ -132,19 +132,23 @@ const handleSongClick = () => {
           <el-divider />
 
           <div class="status-details">
-            <div class="detail-item">
-              <span class="detail-label">版本:</span>
-              <el-tag
-                :type="status.isEdenVersion ? 'warning' : 'success'"
-                size="small"
-              >
-                {{ getEdenText(status.isEdenVersion) }}
-              </el-tag>
-            </div>
+            <div class="detail-row">
+              <div class="detail-item">
+                <span class="detail-label">版本:</span>
+                <el-tag
+                  :type="status.isEdenVersion ? 'warning' : 'success'"
+                  size="small"
+                >
+                  {{ getEdenText(status.isEdenVersion) }}
+                </el-tag>
+              </div>
 
-            <div class="detail-item">
-              <span class="detail-label">偏移量:</span>
-              <code class="offset-value">0x{{ (status.edenOffset ?? 0).toString(16).toUpperCase() }}</code>
+              <div class="detail-item">
+                <span class="detail-label">偏移量:</span>
+                <el-tag size="small" type="info" class="offset-tag">
+                  <code class="offset-code">0x{{ (status.edenOffset ?? 0).toString(16).toUpperCase() }}</code>
+                </el-tag>
+              </div>
             </div>
 
             <template v-if="status?.currentSongInfo">
@@ -164,9 +168,8 @@ const handleSongClick = () => {
                       <span class="song-id">ID: {{ status.currentSongInfo.id }}</span>
                       <el-tag
                         v-if="status.currentChartStyle"
-                        size="small"
-                        type="info"
                         class="chart-style-tag"
+                        :disable-transitions="true"
                       >
                         {{ getChartStyleDisplayName(status.currentChartStyle) }}
                       </el-tag>
@@ -230,16 +233,23 @@ const handleSongClick = () => {
   gap: 8px;
 }
 
+.detail-row {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
 .detail-item {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 4px;
 }
 
 .detail-label {
   color: var(--el-text-color-secondary);
   font-size: 13px;
-  min-width: 60px;
+  min-width: 48px;
 }
 
 .detail-value {
@@ -247,11 +257,12 @@ const handleSongClick = () => {
   font-weight: 500;
 }
 
-.offset-value {
+.offset-tag {
   font-family: monospace;
-  background: var(--el-fill-color);
-  padding: 2px 8px;
-  border-radius: 4px;
+}
+
+.offset-code {
+  font-family: inherit;
   font-size: 12px;
 }
 
@@ -401,6 +412,9 @@ const handleSongClick = () => {
   height: 18px;
   line-height: 16px;
   padding: 0 6px;
+  background-color: #ffffff;
+  border-color: #409eff;
+  color: #409eff;
 }
 
 .song-card {
@@ -597,12 +611,16 @@ const handleSongClick = () => {
 
   .detail-item {
     flex-wrap: wrap;
-    gap: 6px;
+    gap: 4px;
+  }
+
+  .detail-row {
+    gap: 12px;
   }
 
   .detail-label {
     font-size: 14px;
-    min-width: 50px;
+    min-width: 42px;
   }
 
   .status-actions .el-button {
@@ -672,12 +690,16 @@ const handleSongClick = () => {
     flex-wrap: wrap;
   }
 
+  .detail-row {
+    gap: 8px;
+  }
+
   .detail-label {
     font-size: 13px;
     min-width: auto;
   }
 
-  .offset-value {
+  .offset-code {
     font-size: 11px;
   }
 }
