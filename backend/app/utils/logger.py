@@ -16,6 +16,15 @@ def _get_debug_mode() -> bool:
         return False
 
 
+def _get_work_dir() -> Path:
+    """Get working directory, compatible with PyInstaller."""
+    try:
+        from ..config import WORK_DIR
+        return WORK_DIR
+    except ImportError:
+        return Path(__file__).parent.parent.parent
+
+
 # Add console handler with colored output
 logger.add(
     sys.stdout,
@@ -24,8 +33,9 @@ logger.add(
     level="DEBUG" if _get_debug_mode() else "INFO"
 )
 
-# Add file handler for persistent logs
-log_dir = Path(__file__).parent.parent.parent / "logs"
+# Add file handler for persistent logs - use WORK_DIR for PyInstaller compatibility
+work_dir = _get_work_dir()
+log_dir = work_dir / "logs"
 log_dir.mkdir(exist_ok=True)
 
 logger.add(
