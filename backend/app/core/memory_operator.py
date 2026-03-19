@@ -5,7 +5,7 @@ from typing import Optional, Tuple
 
 from app.models.process_module import ProcessModule
 from app.utils.logger import logger
-from app.config import settings, DllSettings
+from app.config import settings, DllEnum, DllPatternOffset
 
 
 class MemoryOperator:
@@ -33,6 +33,12 @@ class MemoryOperator:
     def _get_handle(self) -> Optional[wintypes.HANDLE]:
         """Get process handle from manager."""
         return self._pm.get_handle()
+
+    def get_cached_dll_base(self, dll: DllEnum) -> Optional[int]:
+        module: Optional[ProcessModule] = self._pm.get_cached_dll(dll)
+        if module is None:
+            return None
+        return module.hmodule
 
     def _detect_eden_version(self) -> None:
         """
@@ -74,7 +80,8 @@ class MemoryOperator:
         self,
         base_addr: int,
         apply_eden: bool = False,
-        dll: Optional[DllSettings] = None
+        dll: Optional[DllEnum] = None,
+        dll_pattern_offset: Optional[DllPatternOffset] = None
     ) -> int:
         """
         计算实际内存地址
@@ -83,6 +90,10 @@ class MemoryOperator:
             base_addr: 基础地址或偏移量
             apply_eden: 是否使用 Eden 偏移
             dll: 若指定，则 base_addr 视为该 DLL 的偏移量
+            dll_pattern_offset: 若指定，基于已缓存的 DLL 特征基址 + 偏移量计算地址
+
+        当指定 dll_pattern_offset 时 (优先级最高):
+            最终地址 = 特征码在 DLL 中的地址 + dll_pattern_offset.offset + base_addr (若提供)
 
         当指定 dll 时:
             最终地址 = DLL 基址 + base_addr (作为偏移)
@@ -91,6 +102,24 @@ class MemoryOperator:
         未指定 dll 时:
             最终地址 = base_addr + 进程基址 + Eden 偏移
         """
+        # DllPatternOffset 模式：基于特征码地址 + 偏移
+        if dll_pattern_offset is not None:
+            pattern = dll_pattern_offset.dll_pattern
+            dll_enum = pattern.dll
+
+            # Get cached pattern address from ProcessManager
+            pattern_addr = self._pm.get_pattern_address(dll_enum, pattern)
+            if pattern_addr is None:
+                raise RuntimeError(f"Pattern '{pattern.name}' not found in DLL '{dll_enum}'")
+
+            result = pattern_addr + dll_pattern_offset.offset + base_addr
+            logger.debug(
+                f"PatternOffset address: {pattern.name} "
+                f"pattern_addr=0x{pattern_addr:08X}, offset=0x{dll_pattern_offset.offset:08X}, "
+                f"base=0x{base_addr:X}, result=0x{result:08X}"
+            )
+            return result
+
         # DLL 模式：忽略其他偏移，只计算 DLL 偏移
         if dll is not None:
             dll_base: Optional[ProcessModule] = self._pm.get_cached_dll(dll)
@@ -122,7 +151,8 @@ class MemoryOperator:
         size: int,
         use_offset: bool = True,
         apply_eden: bool = False,
-        dll: Optional[DllSettings] = None
+        dll: Optional[DllEnum] = None,
+        dll_pattern_offset: Optional[DllPatternOffset] = None
     ) -> Optional[bytes]:
         """
         Read raw bytes from process memory.
@@ -133,6 +163,7 @@ class MemoryOperator:
             use_offset: If True, apply address calculations (base/eden/dll). Set to False when entering an absolute address
             apply_eden: If True, apply Eden offset calculation
             dll: If specified, address is treated as an offset from this DLL's base
+            dll_pattern_offset: If specified, address is calculated from pattern base + offset
 
         Returns:
             Bytes read, or None if failed
@@ -145,7 +176,12 @@ class MemoryOperator:
         actual_address = address
         if use_offset:
             try:
-                actual_address = self._get_data_address(address, apply_eden=apply_eden, dll=dll)
+                actual_address = self._get_data_address(
+                    address,
+                    apply_eden=apply_eden,
+                    dll=dll,
+                    dll_pattern_offset=dll_pattern_offset
+                )
             except RuntimeError as e:
                 logger.error(f"Failed to calculate address: {e}")
                 return None
@@ -181,7 +217,8 @@ class MemoryOperator:
         data: bytes,
         use_offset: bool = True,
         apply_eden: bool = False,
-        dll: Optional[DllSettings] = None
+        dll: Optional[DllEnum] = None,
+        dll_pattern_offset: Optional[DllPatternOffset] = None
     ) -> bool:
         """
         Write raw bytes to process memory.
@@ -192,6 +229,7 @@ class MemoryOperator:
             use_offset: If True, apply address calculations (base/eden/dll). Set to False when entering an absolute address
             apply_eden: If True, apply Eden offset calculation
             dll: If specified, address is treated as an offset from this DLL's base
+            dll_pattern_offset: If specified, address is calculated from pattern base + offset
 
         Returns:
             True if successful, False otherwise
@@ -204,7 +242,12 @@ class MemoryOperator:
         actual_address = address
         if use_offset:
             try:
-                actual_address = self._get_data_address(address, apply_eden=apply_eden, dll=dll)
+                actual_address = self._get_data_address(
+                    address,
+                    apply_eden=apply_eden,
+                    dll=dll,
+                    dll_pattern_offset=dll_pattern_offset
+                )
             except RuntimeError as e:
                 logger.error(f"Failed to calculate address: {e}")
                 return False
@@ -263,7 +306,8 @@ class MemoryOperator:
             signed: bool = False,
             use_offset: bool = True,
             apply_eden: bool = False,
-            dll: Optional[DllSettings] = None
+            dll: Optional[DllEnum] = None,
+            dll_pattern_offset: Optional[DllPatternOffset] = None
     ) -> Optional[int]:
         """
         Read an arbitrary integer from memory.
@@ -275,10 +319,17 @@ class MemoryOperator:
             use_offset: If True, apply address calculations (base/eden/dll). Set to False when entering an absolute address
             apply_eden: If True, apply Eden offset
             dll: If specified, address is treated as an offset from this DLL's base
+            dll_pattern_offset: If specified, address is calculated from pattern base + offset
         """
         logger.debug(f"Reading int from address: 0x{address:08X}, size={size}, dll={dll}")
 
-        data = self.read_memory(address, size, use_offset=use_offset, apply_eden=apply_eden, dll=dll)
+        data = self.read_memory(
+            address, size,
+            use_offset=use_offset,
+            apply_eden=apply_eden,
+            dll=dll,
+            dll_pattern_offset=dll_pattern_offset
+        )
         if data is None:
             return None
         return int.from_bytes(data, byteorder='little', signed=signed)
@@ -291,7 +342,8 @@ class MemoryOperator:
             signed: bool = False,
             use_offset: bool = True,
             apply_eden: bool = False,
-            dll: Optional[DllSettings] = None
+            dll: Optional[DllEnum] = None,
+            dll_pattern_offset: Optional[DllPatternOffset] = None
     ) -> bool:
         """
         Write a 32-bit integer to memory.
@@ -304,11 +356,18 @@ class MemoryOperator:
             use_offset: If True, apply address calculations (base/eden/dll). Set to False when entering an absolute address
             apply_eden: If True, apply Eden offset
             dll: If specified, address is treated as an offset from this DLL's base
+            dll_pattern_offset: If specified, address is calculated from pattern base + offset
         """
         logger.debug(f"Writing int to address: 0x{address:08X}, value={value}, size={size}, dll={dll}")
 
         data = value.to_bytes(size, byteorder='little', signed=signed)
-        return self.write_memory(address, data, use_offset=use_offset, apply_eden=apply_eden, dll=dll)
+        return self.write_memory(
+            address, data,
+            use_offset=use_offset,
+            apply_eden=apply_eden,
+            dll=dll,
+            dll_pattern_offset=dll_pattern_offset
+        )
 
     def get_game_state(self) -> Optional[int]:
         """

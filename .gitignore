@@ -4,3 +4,4 @@
 /backend/dist/
 /backend/logs/
 /frontend/node_modules/
+/backend/test/

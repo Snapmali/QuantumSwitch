@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { GameStatusDisplay } from '@/types'
-import { getDifficultyShortLabel, getDifficultyStyle, getDifficultyDisabledStyle } from '@/types'
+import { getDifficultyShortLabel, getDifficultyStyle, getDifficultyDisabledStyle, getChartStyleDisplayName } from '@/types'
 import { Refresh, VideoPlay } from '@element-plus/icons-vue'
 
 const props = defineProps<{
@@ -152,7 +152,7 @@ const handleSongClick = () => {
               <div class="current-song-section">
                 <!-- 歌曲卡片（可点击） -->
                 <div class="song-card clickable" @click="handleSongClick">
-                  <div class="song-icon">
+                  <div class="song-icon" :class="{ 'is-playing': status?.isIngame }">
                     <el-icon :size="24"><VideoPlay /></el-icon>
                   </div>
                   <div class="song-info">
@@ -160,7 +160,17 @@ const handleSongClick = () => {
                     <div class="song-name" :title="status.currentSongInfo.name">
                       {{ status.currentSongInfo.name }}
                     </div>
-                    <div class="song-id">ID: {{ status.currentSongInfo.id }}</div>
+                    <div class="song-meta">
+                      <span class="song-id">ID: {{ status.currentSongInfo.id }}</span>
+                      <el-tag
+                        v-if="status.currentChartStyle"
+                        size="small"
+                        type="info"
+                        class="chart-style-tag"
+                      >
+                        {{ getChartStyleDisplayName(status.currentChartStyle) }}
+                      </el-tag>
+                    </div>
                   </div>
                 </div>
                 <!-- 难度集合（不可点击） -->
@@ -379,6 +389,20 @@ const handleSongClick = () => {
   color: var(--el-text-color-secondary);
 }
 
+.song-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 2px;
+}
+
+.chart-style-tag {
+  font-size: 11px;
+  height: 18px;
+  line-height: 16px;
+  padding: 0 6px;
+}
+
 .song-card {
   display: flex;
   align-items: center;
@@ -402,6 +426,20 @@ const handleSongClick = () => {
   border-radius: 50%;
   color: white;
   flex-shrink: 0;
+}
+
+.song-icon.is-playing {
+  background: linear-gradient(135deg, #67c23a 0%, #85ce61 100%);
+  //box-shadow: 0 0 15px rgba(103, 194, 58, 0.6);
+}
+
+@keyframes pulse {
+  0%, 100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.05);
+  }
 }
 
 .song-info {

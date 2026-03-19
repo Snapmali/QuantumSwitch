@@ -9,7 +9,18 @@ class ChartStyle(Enum):
     """NC difficulty style types."""
     ARCADE = "ARCADE"
     CONSOLE = "CONSOLE"
-    MIXED = "Mixed"
+    MIXED = "MIXED"
+
+    @classmethod
+    def from_string(cls, value: str) -> Optional["ChartStyle"]:
+        """Parse ChartStyle from string (case-insensitive)."""
+        if not value:
+            return None
+        try:
+            return cls(value.upper())
+        except ValueError:
+            return None
+
 
 class DifficultyType(Enum):
     """Difficulty types for songs."""
@@ -59,8 +70,7 @@ class ChartInfo:
     is_original: bool = False  # 是否为原谱
     is_slide: bool = False  # 是否为滑动谱
     index: int = 0  # 同类型难度的索引，用于区分多个 EXTREME
-    mod_ids: Set[int] = field(default_factory=set)  # 来源 Mod ID 集合（已弃用）
-    mod_id: int = None # 来源 Mod ID
+    mod_id: int = 0 # 来源 Mod ID
 
 
 @dataclass
@@ -165,20 +175,10 @@ class Song:
                     "isOriginal": d.is_original,
                     "isSlide": d.is_slide,
                     "index": d.index,
-                    "modIds": list(d.mod_ids),  # set 转 list
                 }
                 for d in self.chart_infos
             ],
             "hidden": self.hidden,
-            "modPath": self.mod_path,
-            "modInfo": {
-                "id": self.mod_info.id,
-                "name": self.mod_info.name,
-                "path": self.mod_info.path,
-                "enabled": self.mod_info.enabled,
-                "author": self.mod_info.author,
-                "version": self.mod_info.version,
-            } if self.mod_info else None,
             "modInfos": [
                 {
                     "id": m.id,
@@ -214,9 +214,10 @@ class Song:
 class NcSong:
     """NC database song entry."""
     song_id: int
+    mod_info: ModInfo
+    mod_id: int = 0
     chart_infos: List[NcChartInfo] = field(default_factory=list)
     source_file: Optional[str] = None
-    mod_id: Optional[int] = None
 
 
 diff_type_mapping = {

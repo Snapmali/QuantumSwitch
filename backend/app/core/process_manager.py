@@ -7,7 +7,7 @@ import psutil
 
 from app.models.process_module import ProcessModule
 from app.utils.logger import logger
-from app.config import settings, DllSettings
+from app.config import settings, DllEnum, DllPattern
 
 
 class ProcessManager:
@@ -150,10 +150,16 @@ class ProcessManager:
             logger.info(f"Found process {self.process_name} (PID: {pid}) at base address 0x{self._base_address:08X}")
             # Build DLL cache from already enumerated modules
             self._dll_cache = self._build_dll_cache(modules)
+            # Scan patterns for cached DLLs
+            self.scan_dll_patterns()
         else:
-            self._base_address = 0x140000000
-            self._dll_cache = {}
-            logger.warning(f"Could not enumerate modules, using default base address 0x{self._base_address:08X}")
+            logger.error(f"Could not enumerate modules of process {pid}, not attached.")
+            self._process_handle = None
+            self._process_id = None
+            self._base_address = None
+            self._eden_checked = False
+            self._dll_cache = None
+            return False
 
         logger.info(f"Successfully attached to process {pid}")
         return True
@@ -172,6 +178,16 @@ class ProcessManager:
         self._base_address = None
         self._eden_checked = False
         self._dll_cache = None
+
+    def get_process_info(self) -> Optional[dict]:
+        """Get process information dictionary"""
+        if not self.is_attached:
+            if not self.attach():
+                return None
+        return {
+            "pid": self._process_id,
+            "base_address": self._base_address,
+        }
 
     def get_modules(self) -> List[int]:
         """
@@ -225,17 +241,7 @@ class ProcessManager:
         # Filter out None/null handles
         return [h for h in h_mods if h]
 
-    def get_process_info(self) -> Optional[dict]:
-        """Get process information dictionary"""
-        if not self.is_attached:
-            if not self.attach():
-                return None
-        return {
-            "pid": self._process_id,
-            "base_address": self._base_address,
-        }
-
-    def get_cached_dll(self, dll: DllSettings) -> Optional[ProcessModule]:
+    def get_cached_dll(self, dll: DllEnum) -> Optional[ProcessModule]:
         """
         Retrieve a cached DLL module from the internal cache.
 
@@ -323,25 +329,25 @@ class ProcessManager:
 
         dll_list = self._build_dll_dict_from_modules(modules)
         # 仅缓存白名单中的 DLL，且位于游戏路径下
-        for path, hmodule in dll_list.items():
-            dll_path = Path(path)
-            dll_name = dll_path.name
+        for white in whitelist:
+            for path, hmodule in dll_list.items():
+                dll_path = Path(path)
+                dll_name = dll_path.name
 
-            # 检查是否在游戏路径下（如果游戏路径已知）
-            if game_directory is not None:
-                try:
-                    # 检查 dll_path 是否在游戏目录下
-                    dll_path.resolve().relative_to(game_directory.resolve())
-                except ValueError:
-                    # 不在游戏目录下，跳过
-                    continue
-
-            for white in whitelist:
+                # 检查是否在游戏路径下（如果游戏路径已知）
+                if game_directory is not None:
+                    try:
+                        # 检查 dll_path 是否在游戏目录下
+                        dll_path.resolve().relative_to(game_directory.resolve())
+                    except ValueError:
+                        # 不在游戏目录下，跳过
+                        continue
                 if white == dll_name:
                     module = ProcessModule(
                         name=dll_name,
                         path=dll_path,
-                        hmodule=hmodule
+                        hmodule=hmodule,
+                        pattern_cache={}
                     )
                     output[white] = module
                     logger.debug(f"Cached DLL: {path} at 0x{hmodule:08X}")
@@ -375,3 +381,195 @@ class ProcessManager:
                 output[path] = hmodule
 
         return output
+
+    def scan_dll_patterns(self) -> None:
+        """
+        Scan all configured patterns in cached DLLs.
+        Results are stored in each ProcessModule's pattern_cache.
+        """
+        if self._dll_cache is None:
+            logger.warning("Cannot scan patterns: DLL cache not initialized")
+            return
+
+        for pattern_config in settings.CACHED_PATTERN:
+            dll_name = pattern_config.dll
+            pattern_bytes = pattern_config.pattern
+
+            # Find the DLL in cache
+            dll_module = self._dll_cache.get(dll_name)
+            if dll_module is None:
+                logger.debug(f"Pattern scan skipped: {dll_name} not in cache")
+                continue
+
+            # Scan for pattern
+            address = self._scan_pattern_in_dll(dll_module, pattern_bytes)
+            if address is not None:
+                dll_module.pattern_cache[pattern_config.name] = address
+                logger.info(f"Pattern '{pattern_config.name}' found in {dll_name} at 0x{address:08X}")
+            else:
+                logger.warning(f"Pattern '{pattern_config.name}' not found in {dll_name}")
+
+    def get_pattern_address(self, dll: DllEnum, pattern: DllPattern) -> Optional[int]:
+        """
+        Get cached pattern address from a specific DLL.
+
+        Args:
+            dll: The DLL enum to look in
+            pattern: The DllPattern to find
+
+        Returns:
+            The cached address if found, None otherwise
+        """
+        if self._dll_cache is None:
+            return None
+
+        dll_module = self._dll_cache.get(dll)
+        if dll_module is None:
+            return None
+
+        return dll_module.pattern_cache.get(pattern.name)
+
+    def _scan_pattern_in_dll(self, dll_module: ProcessModule, pattern: bytes) -> Optional[int]:
+        """
+        Scan for a byte pattern within a DLL's memory.
+
+        Args:
+            dll_module: The ProcessModule to scan
+            pattern: The byte pattern to search for (may contain wildcards as None bytes)
+
+        Returns:
+            The address where pattern was found, or None if not found
+        """
+        if not self.is_attached or self._process_handle is None:
+            logger.error("Cannot scan pattern: not attached to process")
+            return None
+
+        # Get module information to determine size
+        module_info = self._get_module_info(dll_module.hmodule)
+        if module_info is None:
+            logger.error(f"Failed to get module info for {dll_module.name}")
+            return None
+
+        base_addr, module_size = module_info
+
+        # Read entire module memory
+        handle = self.get_handle()
+        if handle is None:
+            return None
+
+        try:
+            buffer = self._read_memory_range(handle, base_addr, module_size)
+            if buffer is None:
+                logger.error(f"Failed to read memory from {dll_module.name}")
+                return None
+
+            # Search for pattern with wildcard support
+            offset = self._find_pattern_with_wildcards(buffer, pattern)
+            if offset == -1:
+                return None
+
+            return base_addr + offset
+
+        except Exception as e:
+            logger.error(f"Error scanning pattern in {dll_module.name}: {e}")
+            return None
+
+    def _get_module_info(self, hmodule: int) -> Optional[tuple]:
+        """
+        Get module base address and size.
+
+        Args:
+            hmodule: The module handle
+
+        Returns:
+            Tuple of (base_address, size) or None if failed
+        """
+        psapi = ctypes.windll.psapi
+
+        class MODULEINFO(ctypes.Structure):
+            _fields_ = [
+                ("lpBaseOfDll", ctypes.c_void_p),
+                ("SizeOfImage", wintypes.DWORD),
+                ("EntryPoint", ctypes.c_void_p),
+            ]
+
+        module_info = MODULEINFO()
+        result = psapi.GetModuleInformation(
+            self._process_handle,
+            wintypes.HMODULE(hmodule),
+            ctypes.byref(module_info),
+            ctypes.sizeof(module_info)
+        )
+
+        if not result:
+            error = ctypes.windll.kernel32.GetLastError()
+            logger.error(f"GetModuleInformation failed, error: {error}")
+            return None
+
+        return int(module_info.lpBaseOfDll), module_info.SizeOfImage
+
+    def _read_memory_range(self, handle, base_addr: int, size: int) -> Optional[bytes]:
+        """
+        Read a range of memory from the process.
+
+        Args:
+            handle: Process handle
+            base_addr: Starting address
+            size: Number of bytes to read
+
+        Returns:
+            Bytes read, or None if failed
+        """
+        kernel32 = ctypes.windll.kernel32
+        buffer = ctypes.create_string_buffer(size)
+        bytes_read = ctypes.c_size_t(0)
+
+        success = kernel32.ReadProcessMemory(
+            handle,
+            ctypes.c_void_p(base_addr),
+            buffer,
+            size,
+            ctypes.byref(bytes_read)
+        )
+
+        if not success:
+            error = kernel32.GetLastError()
+            logger.error(f"ReadProcessMemory failed at 0x{base_addr:08X}, error: {error}")
+            return None
+
+        return buffer.raw[:bytes_read.value]
+
+    def _find_pattern_with_wildcards(self, data: bytes, pattern: bytes) -> int:
+        """
+        Find pattern in data, supporting wildcards (0x2E '.').
+
+        Args:
+            data: The data to search in
+            pattern: The pattern to search for ('.' acts as wildcard)
+
+        Returns:
+            Offset where pattern found, or -1 if not found
+        """
+        if not pattern:
+            return -1
+
+        pattern_len = len(pattern)
+        data_len = len(data)
+
+        if pattern_len > data_len:
+            return -1
+
+        # Convert pattern to bytearray for mutable comparison
+        pattern_bytes = bytearray(pattern)
+
+        for i in range(data_len - pattern_len + 1):
+            match = True
+            for j in range(pattern_len):
+                # 0x2E is '.' which acts as wildcard
+                if pattern_bytes[j] != 0x2E and data[i + j] != pattern_bytes[j]:
+                    match = False
+                    break
+            if match:
+                return i
+
+        return -1

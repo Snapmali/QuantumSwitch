@@ -7,10 +7,29 @@ from typing import Optional
 from enum import Enum
 
 
-class DllSettings(str, Enum):
+class DllEnum(str, Enum):
     """预定义的 DLL 名称配置"""
     NEW_CLASSICS = "NewClassics.dll"
     DIVA_MOD_LOADER = "dinput8.dll"
+
+
+class DllPattern(Enum):
+    CHART_STYLE_PATTERN = (
+        DllEnum.NEW_CLASSICS,
+        b"\x74\x0B\x8B\x88....\x83\xF9\x03\x75\x02\x33\xC9\x89\x0D....\x40\x0F\xB6\xC7\x48\x8B"
+    )
+
+    def __init__(self, dll: str, pattern: bytes):
+        self.dll: str = dll
+        self.pattern: bytes = pattern
+
+
+class DllPatternOffset(Enum):
+    CHART_STYLE_OFFSET = (DllPattern.CHART_STYLE_PATTERN, 17)
+
+    def __init__(self, dll_pattern: DllPattern, offset: int):
+        self.dll_pattern: DllPattern = dll_pattern
+        self.offset: int = offset
 
 
 # Detect runtime mode
@@ -73,8 +92,12 @@ class Settings(BaseSettings):
 
     # DLL 白名单 - 仅缓存这些 DLL
     CACHED_DLLS: list[str] = [
-        DllSettings.NEW_CLASSICS,
-        DllSettings.DIVA_MOD_LOADER,
+        DllEnum.NEW_CLASSICS,
+        DllEnum.DIVA_MOD_LOADER,
+    ]
+
+    CACHED_PATTERN: list[DllPattern] = [
+        DllPattern.CHART_STYLE_PATTERN
     ]
 
     class Config:

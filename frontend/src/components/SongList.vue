@@ -40,6 +40,15 @@ const favoritesOnlyLocal = computed({
   set: (val) => emit('update:favoritesOnly', val)
 })
 
+// ChartStyle filter state - default to ARCADE
+const selectedChartStyle = ref<string>('ARCADE')
+
+const chartStyleOptions = [
+  { value: 'ARCADE', label: 'A' },
+  { value: 'CONSOLE', label: 'C' },
+  { value: 'MIXED', label: 'M' },
+]
+
 // 滚动到列表顶部
 const scrollToTop = () => {
   const container = document.querySelector('.songs-container')
@@ -72,10 +81,14 @@ const filteredSongs = computed(() => {
   // Note: Search is now handled server-side via the search event
   // Only difficulty filtering is done client-side
 
-  // Filter by difficulty
+  // Filter by difficulty - check across all styles for the difficulty type
   if (selectedDifficulties.value.length > 0) {
     result = result.filter(song =>
-      song.difficultyDetails?.some(d => selectedDifficulties.value.includes(d.name))
+      song.difficultyDetails?.some(style =>
+        style.difficulties?.some(diff =>
+          selectedDifficulties.value.includes(diff.name) && diff.hasEnabledCharts
+        )
+      )
     )
   }
 
@@ -104,6 +117,33 @@ const formatLevel = (level: number): string => {
   if (level === 0) return ''
   // Show as integer if it's a whole number, otherwise show decimal
   return Number.isInteger(level) ? level.toString() : level.toFixed(1)
+}
+
+// 获取指定 ChartStyle 的全部难度列表（用于单 style 模式）
+const getChartStyleDifficulties = (
+  song: Song,
+  style: string
+): { type: number, name: string, shortName: string, maxLevel: number }[] => {
+  const styleDetail = song.difficultyDetails.find(s => s.style === style)
+  if (!styleDetail) return []
+
+  return styleDetail.difficulties
+    .filter(diff => diff.hasEnabledCharts)
+    .map(diff => {
+      // 找出该难度下最高等级的 chart
+      const maxLevel = diff.chartInfos
+        .filter(c => c.enabled)
+        .reduce((max, chart) => Math.max(max, chart.level), 0)
+
+      return {
+        type: diff.type,
+        name: diff.name,
+        shortName: diff.shortName,
+        maxLevel
+      }
+    })
+    .filter(d => d.maxLevel > 0)
+    .sort((a, b) => a.type - b.type)  // 按难度类型排序（EASY -> EXTRA_EXTREME）
 }
 </script>
 
@@ -140,15 +180,24 @@ const formatLevel = (level: number): string => {
       />
     </div>
 
-    <!-- Favorites Filter -->
-    <div class="favorites-filter">
+    <!-- Filters Row -->
+    <div class="filters-row">
       <el-radio-group v-model="favoritesOnlyLocal" size="small">
         <el-radio-button :value="false">
-          全部歌曲
+          <div class="filter-btn-content">全部歌曲</div>
         </el-radio-button>
         <el-radio-button :value="true">
-          <el-icon><StarFilled /></el-icon>
-          已收藏
+          <div class="filter-btn-content">
+            <el-icon><StarFilled /></el-icon>
+            <span>已收藏</span>
+          </div>
+        </el-radio-button>
+      </el-radio-group>
+
+      <!-- ChartStyle Filter -->
+      <el-radio-group v-model="selectedChartStyle" size="small">
+        <el-radio-button v-for="opt in chartStyleOptions" :key="opt.value" :value="opt.value">
+          {{ opt.label }}
         </el-radio-button>
       </el-radio-group>
     </div>
@@ -179,22 +228,24 @@ const formatLevel = (level: number): string => {
           </div>
         </div>
         <div class="song-difficulties">
+          <!-- Show all difficulties for selected ChartStyle -->
           <el-tooltip
-            v-for="detail in song.difficultyDetails"
-            :key="detail.type + '-' + detail.index"
-            :content="`${detail.name}${detail.level > 0 ? ' - ' + formatLevel(detail.level) + '★' : ''}`"
+            v-for="diff in getChartStyleDifficulties(song, selectedChartStyle)"
+            :key="diff.type"
+            :content="`${diff.name}${diff.maxLevel > 0 ? ' - ' + formatLevel(diff.maxLevel) + '★' : ''}`"
             placement="top"
           >
             <span
               class="diff-tag-static"
-              :style="detail.enabled === false ? getDifficultyDisabledStyle(detail.name) : getDifficultyStyle(detail.name)"
+              :style="getDifficultyStyle(diff.name)"
             >
-              <span class="diff-short">{{ getDifficultyShortLabel(detail.name) }}</span>
-              <span v-if="detail.level > 0" class="diff-level">
-                {{ formatLevel(detail.level) }}
+              <span class="diff-short">{{ diff.shortName }}</span>
+              <span v-if="diff.maxLevel > 0" class="diff-level">
+                {{ formatLevel(diff.maxLevel) }}
               </span>
             </span>
           </el-tooltip>
+
           <!-- Favorite Star -->
           <span
             class="favorite-star"
@@ -254,17 +305,25 @@ const formatLevel = (level: number): string => {
   min-width: 120px;
 }
 
-.favorites-filter {
+.filters-row {
   padding: 8px 16px;
   border-bottom: 1px solid var(--el-border-color-light);
   display: flex;
-  justify-content: center;
+  justify-content: space-between;
+  align-items: center;
 }
 
-.favorites-filter .el-radio-button__inner {
+.filters-row .el-radio-button__inner {
   display: flex;
   align-items: center;
   gap: 4px;
+}
+
+.filter-btn-content {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  height: 100%;
 }
 
 .songs-container {

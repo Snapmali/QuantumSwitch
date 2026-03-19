@@ -1,44 +1,49 @@
 """Game control API endpoints."""
 import traceback
+
 from fastapi import APIRouter, HTTPException
 
-from ..models import (
-    GameStatusResponse,
-    SwitchSongRequest,
-    SwitchSongResponse,
-    ApiResponse,
-    CurrentSongInfo,
-    CurrentSongDifficultyInfo,
-)
-from ..models.song import DifficultyType
 from ..core.bootstrap import (
     get_process_manager,
     get_memory_operator,
     get_song_selector,
     get_pvdb_parser,
 )
+from ..models import (
+    GameStatusResponse,
+    SwitchSongRequest,
+    SwitchSongResponse,
+    ApiResponse,
+    ChartStyle,
+    CurrentSongInfo,
+    CurrentSongDifficultyInfo,
+    DifficultyType, Song,
+)
 from ..utils.logger import logger
 
 router = APIRouter(prefix="/game", tags=["game"])
 
 
-def _build_current_song_info(song) -> CurrentSongInfo:
+def _build_current_song_info(song: Song, style: ChartStyle) -> CurrentSongInfo:
     """Build CurrentSongInfo from a Song object."""
     # Build Mod enabled status lookup table
     mod_enabled_map = {m.id: m.enabled for m in song.mod_infos}
 
     # Build difficulty info with enabled status
     difficulty_infos = []
+    seen_difficulties = set()
     for d in song.chart_infos:
+        # Skip duplicate difficulty types (we only need one entry per type)
+        if d.type in seen_difficulties or style != d.style:
+            continue
+        seen_difficulties.add(d.type)
+
         # Original difficulty is always enabled
         if d.is_original:
             is_difficulty_enabled = True
         else:
-            # Check if any mod providing this difficulty is enabled
-            is_difficulty_enabled = any(
-                mod_enabled_map.get(mod_id, False)
-                for mod_id in d.mod_ids
-            ) if d.mod_ids else song.is_vanilla
+            # Check if the mod providing this difficulty is enabled
+            is_difficulty_enabled = mod_enabled_map.get(d.mod_id, False) if d.mod_id is not None else song.is_vanilla
 
         difficulty_infos.append(CurrentSongDifficultyInfo(
             name=d.type.display_name,
@@ -69,7 +74,10 @@ def get_game_status_internal() -> GameStatusResponse:
     game_state = mem.get_game_state()
 
     # Get current selection from memory
-    pvid, is_ingame = selector.get_current_selection()
+    pvid, is_ingame, style = selector.get_current_selection()
+
+    # 将 ChartStyle 转换为字符串
+    current_style = style.value if style else None
 
     # Get current song info from selector
     current_song_info = None
@@ -77,7 +85,7 @@ def get_game_status_internal() -> GameStatusResponse:
         parser = get_pvdb_parser()
         song = parser.get_song(pvid)
         if song:
-            current_song_info = _build_current_song_info(song)
+            current_song_info = _build_current_song_info(song, style)
 
     return GameStatusResponse(
         running=is_running,
@@ -86,7 +94,9 @@ def get_game_status_internal() -> GameStatusResponse:
         gameState=game_state,
         edenVersion=mem.is_eden_version,
         edenOffset=mem.eden_offset,
-        currentSongInfo=current_song_info
+        currentSongInfo=current_song_info,
+        currentChartStyle=current_style,
+        isIngame=is_ingame if is_ingame is not None else False,
     )
 
 
@@ -125,10 +135,14 @@ async def switch_song(request: SwitchSongRequest):
         except ValueError:
             difficulty = DifficultyType.HARD
 
+        # Convert style string to ChartStyle
+        style = ChartStyle.from_string(request.style)
+
         # Attempt song switch
         success, message, actual_difficulty, mode = selector.switch_song(
             song=song,
-            difficulty=difficulty
+            difficulty=difficulty,
+            style=style
         )
 
         # Get actual difficulty name
@@ -163,7 +177,7 @@ async def get_current_song():
         parser = get_pvdb_parser()
 
         # Get current selection from selector (reads from game memory)
-        pvid, is_ingame = selector.get_current_selection()
+        pvid, is_ingame, style = selector.get_current_selection()
 
         if pvid is None:
             return ApiResponse(success=True, data=CurrentSongInfo(id=0, name=""))
@@ -180,7 +194,7 @@ async def get_current_song():
                 )
             )
 
-        current_song_info = _build_current_song_info(song)
+        current_song_info = _build_current_song_info(song, style)
 
         return ApiResponse(success=True, data=current_song_info)
     except Exception as e:

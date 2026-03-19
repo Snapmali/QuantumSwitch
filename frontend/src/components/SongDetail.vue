@@ -1,34 +1,48 @@
 <script setup lang="ts">
 import type { Song } from '@/types'
 import { ref, computed } from 'vue'
-import {Check, Folder, InfoFilled, StarFilled, Star, SwitchButton, UserFilled, VideoPlay, Collection} from "@element-plus/icons-vue"
-import { formatLevel, getDifficultyLabel, getDifficultyShortLabel, DifficultyColorValues } from '@/types'
+import {Check, Folder, InfoFilled, StarFilled, Star, SwitchButton, UserFilled, VideoPlay, Collection, Warning} from "@element-plus/icons-vue"
+import { formatLevel, getDifficultyLabel, DifficultyColorValues } from '@/types'
 
 const props = defineProps<{
   song: Song | null
-  selectedDifficulty?: string | null
+  selectedStyle?: string | null
+  selectedDifficultyType?: number | null
   gameRunning?: boolean
   isModEnabled?: boolean
   isFavorite?: boolean
 }>()
 
 const emit = defineEmits<{
-  selectDifficulty: [difficulty: string]
+  selectDifficulty: [style: string, difficultyType: number]
   switchSong: []
   toggleFavorite: []
 }>()
 
 // 跟踪悬停的难度
-const hoveredDifficulty = ref<string | null>(null)
+const hoveredDifficulty = ref<{style: string, type: number} | null>(null)
 
+// 根据 style 和 type 查找对应的 DifficultyTypeDetail
+const findDifficultyDetail = (
+  song: Song | null,
+  style: string | null,
+  difficultyType: number | null | undefined
+) => {
+  if (!song || !style || difficultyType === null || difficultyType === undefined) return undefined
+  const styleDetail = song.difficultyDetails.find(s => s.style === style)
+  if (!styleDetail) return undefined
+  return styleDetail.difficulties.find(d => d.type === difficultyType)
+}
 
 // 计算按钮禁用状态和提示文本
 const switchButtonDisabled = computed(() => {
-  if (!props.selectedDifficulty) return true
+  if (!props.selectedStyle || props.selectedDifficultyType === null) return true
   if (!props.gameRunning) return true
+
   // 检查选中的难度是否被禁用
-  const selectedDetail = props.song?.difficultyDetails.find(d => d.name === props.selectedDifficulty)
-  if (selectedDetail?.enabled === false) return true
+  const diffDetail = findDifficultyDetail(props.song, props.selectedStyle, props.selectedDifficultyType)
+  if (!diffDetail?.hasEnabledCharts) return true
+
   // 原版歌曲不检测mod启用状态
   if (props.song?.isVanilla) return false
   if (props.isModEnabled === false) return true
@@ -36,19 +50,24 @@ const switchButtonDisabled = computed(() => {
 })
 
 const switchButtonHint = computed(() => {
-  if (!props.selectedDifficulty) return '请先选择难度'
+  if (!props.selectedStyle || props.selectedDifficultyType === null) return '请先选择难度'
   if (!props.gameRunning) return '游戏未运行'
+
   // 检查选中的难度是否被禁用
-  const selectedDetail = props.song?.difficultyDetails.find(d => d.name === props.selectedDifficulty)
-  if (selectedDetail?.enabled === false) return '该难度已被禁用'
+  const diffDetail = findDifficultyDetail(props.song, props.selectedStyle, props.selectedDifficultyType)
+  if (!diffDetail?.hasEnabledCharts) return '该难度已被禁用'
+
   // 原版歌曲不显示mod禁用提示
   if (props.song?.isVanilla) return ''
   if (props.isModEnabled === false) return 'Mod 已禁用'
   return ''
 })
 
-const handleSelectDifficulty = (difficultyType: string) => {
-  emit('selectDifficulty', difficultyType)
+const handleSelectDifficulty = (style: string, difficultyType: number) => {
+  const diffDetail = findDifficultyDetail(props.song, style, difficultyType)
+  if (diffDetail?.hasEnabledCharts) {
+    emit('selectDifficulty', style, difficultyType)
+  }
 }
 
 const handleSwitch = () => {
@@ -185,7 +204,7 @@ const hasCredits = computed(() => {
 
       <el-divider />
 
-      <!-- Difficulty Details -->
+      <!-- Difficulty Details - Hierarchical Structure -->
       <div class="difficulty-section">
         <h3 class="section-title">
           <el-icon>
@@ -193,36 +212,86 @@ const hasCredits = computed(() => {
           </el-icon>
           难度详情
         </h3>
-        <div class="difficulty-list">
-          <div v-for="detail in song.difficultyDetails" :key="detail.type + '-' + detail.index"
-            :class="['difficulty-card', {
-              selected: selectedDifficulty === detail.name,
-              disabled: detail.enabled === false
-            }]"
-            :style="getDifficultyCardStyle(detail.name, selectedDifficulty === detail.name, hoveredDifficulty === detail.name, detail.enabled === false)"
-            @click="detail.enabled !== false ? handleSelectDifficulty(detail.name) : null"
-            @mouseenter="hoveredDifficulty = detail.name"
-            @mouseleave="hoveredDifficulty = null"
-          >
-            <div class="difficulty-content">
-              <div class="difficulty-main">
-                <div class="difficulty-badge" :style="{ backgroundColor: detail.enabled === false ? '#8c959f' : getDifficultyColor(detail.name) }">{{ getDifficultyShortLabel(detail.name) }}</div>
-                <div class="difficulty-info">
-                  <div class="difficulty-name">{{ getDifficultyLabel(detail.name) }}</div>
-                  <div v-if="detail.level > 0" class="difficulty-level">
-                    <span class="level-value">{{ formatLevel(detail.level) }}</span>
+
+        <!-- Style Groups (Vertical) -->
+        <div v-for="styleGroup in song.difficultyDetails" :key="styleGroup.style" class="style-group">
+          <h4 class="style-title">{{ styleGroup.displayName }}</h4>
+
+          <!-- Difficulty Cards (Horizontal) -->
+          <div class="difficulty-cards">
+            <div
+              v-for="diff in styleGroup.difficulties"
+              :key="diff.type"
+              :class="['difficulty-card', {
+                selected: selectedStyle === styleGroup.style && selectedDifficultyType === diff.type,
+                disabled: !diff.hasEnabledCharts
+              }]"
+              :style="getDifficultyCardStyle(
+                diff.name,
+                selectedStyle === styleGroup.style && selectedDifficultyType === diff.type,
+                hoveredDifficulty?.style === styleGroup.style && hoveredDifficulty?.type === diff.type,
+                !diff.hasEnabledCharts
+              )"
+              @click="diff.hasEnabledCharts ? handleSelectDifficulty(styleGroup.style, diff.type) : null"
+              @mouseenter="hoveredDifficulty = { style: styleGroup.style, type: diff.type }"
+              @mouseleave="hoveredDifficulty = null"
+            >
+              <div class="difficulty-content">
+                <div class="difficulty-main">
+                  <!-- Header: badge + name centered -->
+                  <div class="difficulty-header">
+                    <div
+                      class="difficulty-badge"
+                      :style="{ backgroundColor: !diff.hasEnabledCharts ? '#8c959f' : getDifficultyColor(diff.name) }"
+                    >
+                      {{ diff.shortName }}
+                    </div>
+                    <div class="difficulty-name">{{ getDifficultyLabel(diff.name) }}</div>
+                  </div>
+                  <!-- Chart Info List -->
+                  <div class="chart-infos">
+                    <div
+                      v-for="chart in diff.chartInfos"
+                      :key="chart.modId"
+                      :class="['chart-item', { disabled: !chart.enabled }]"
+                    >
+                      <span v-if="chart.level > 0" class="level">{{ formatLevel(chart.level) }}★</span>
+                      <span v-if="chart.modName" class="mod-name">{{ chart.modName }}</span>
+                      <el-tag v-if="!chart.enabled" type="info" size="small" :disable-transitions="true">已禁用</el-tag>
+                    </div>
+
+                    <!-- Multiple ChartInfo Warning -->
+                    <el-tag
+                      v-if="diff.chartInfos.filter(c => c.enabled).length > 1"
+                      type="warning"
+                      size="small"
+                      class="conflict-warning"
+                      :disable-transitions="true"
+                    >
+                      <span class="conflict-content">
+                        <el-icon><warning /></el-icon>
+                        <span>模组冲突</span>
+                      </span>
+                    </el-tag>
                   </div>
                 </div>
-              </div>
-              <div v-if="selectedDifficulty === detail.name" class="selected-icon" :style="{ color: getDifficultyColor(detail.name) }">
-                <el-icon><check /></el-icon>
-              </div>
-              <!-- 禁用标记 -->
-              <div v-if="detail.enabled === false" class="disabled-indicator">
-                <el-tag type="info" size="small" :disable-transitions="true">已禁用</el-tag>
+
+                <!-- Selected Icon -->
+                <div
+                  v-if="selectedStyle === styleGroup.style && selectedDifficultyType === diff.type"
+                  class="selected-icon"
+                  :style="{ color: getDifficultyColor(diff.name) }"
+                >
+                  <el-icon><check /></el-icon>
+                </div>
               </div>
             </div>
           </div>
+        </div>
+
+        <!-- No Difficulties Message -->
+        <div v-if="song.difficultyDetails.length === 0" class="no-difficulties">
+          <el-empty description="暂无难度信息" />
         </div>
       </div>
 
@@ -470,75 +539,40 @@ const hasCredits = computed(() => {
   gap: 6px;
 }
 
-/* Wide screen optimizations (1024px and above) */
-@media (min-width: 1025px) {
-  .difficulty-card {
-    min-width: 120px;
-    max-width: 160px;
-  }
-
-  .difficulty-content {
-    padding: 0 10px;
-    gap: 8px;
-  }
-
-  .difficulty-badge {
-    width: 28px;
-    height: 28px;
-    font-size: 11px;
-  }
-
-  .difficulty-name {
-    font-size: 12px;
-  }
-
-  .song-header {
-    height: 90px;
-    min-height: 90px;
-  }
-
-  .song-icon {
-    width: 56px;
-    height: 56px;
-  }
-
-  .song-name {
-    font-size: 16px;
-  }
-
-  .metadata-grid {
-    gap: 8px;
-  }
-
-  .metadata-item {
-    padding: 6px 10px;
-  }
-
-  .mod-item {
-    padding: 10px;
-  }
-
-  .song-detail {
-    padding: 16px;
-  }
-}
-
 .section-title .el-icon {
   font-size: 16px;
   color: var(--el-color-primary);
 }
 
-/* Difficulty Section - Flat Modern Style */
+/* Difficulty Section - Hierarchical Structure */
 .difficulty-section {
   margin-bottom: 4px;
 }
 
-.difficulty-list {
+/* Style Group */
+.style-group {
+  margin-bottom: 20px;
+}
+
+.style-group:last-child {
+  margin-bottom: 0;
+}
+
+.style-title {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--el-text-color-primary);
+  margin: 0 0 12px 0;
+  padding-left: 10px;
+  border-left: 3px solid var(--el-color-primary);
+  line-height: 1.4;
+}
+
+/* Difficulty Cards (Horizontal Layout) */
+.difficulty-cards {
   display: flex;
-  flex-direction: row;
   flex-wrap: wrap;
-  gap: 8px;
-  width: 100%;
+  gap: 10px;
 }
 
 .difficulty-card {
@@ -551,7 +585,8 @@ const hasCredits = computed(() => {
   flex: 1;
   min-width: 140px;
   max-width: 180px;
-  height: 56px;
+  height: auto;
+  min-height: 70px;
   overflow: hidden;
   background: #fff;
   position: relative;
@@ -563,60 +598,51 @@ const hasCredits = computed(() => {
   opacity: 0.6;
 }
 
-.difficulty-card:hover {
-  /* 悬停样式由动态样式绑定设置 */
-}
-
 .difficulty-card.selected {
   /* 选中样式由动态样式绑定设置 */
-}
-
-.difficulty-card {
-  height: 64px;
 }
 
 .difficulty-content {
   display: flex;
   flex-direction: row;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
-  padding: 0 12px;
+  padding: 10px 12px;
   height: 100%;
-  gap: 10px;
+  gap: 8px;
 }
 
 .difficulty-main {
   display: flex;
-  align-items: center;
-  gap: 10px;
+  flex-direction: column;
+  gap: 6px;
   flex: 1;
   min-width: 0;
 }
 
+.difficulty-header {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 8px;
+}
+
 .difficulty-badge {
-  width: 32px;
-  height: 32px;
+  width: 28px;
+  height: 28px;
   border-radius: 4px;
   display: flex;
   align-items: center;
   justify-content: center;
   font-weight: 600;
-  font-size: 12px;
+  font-size: 11px;
   color: white;
   flex-shrink: 0;
 }
 
-.difficulty-info {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  min-width: 0;
-  flex: 1;
-}
-
 .difficulty-name {
-  font-size: 13px;
-  font-weight: 500;
+  font-size: 12px;
+  font-weight: 600;
   color: #24292f;
   line-height: 1.2;
   white-space: nowrap;
@@ -624,26 +650,75 @@ const hasCredits = computed(() => {
   text-overflow: ellipsis;
 }
 
-.difficulty-level {
-  font-size: 12px;
-  color: #656d76;
+/* Chart Info List */
+.chart-infos {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
 }
 
-.level-value {
+.chart-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: #656d76;
+  line-height: 1.3;
+}
+
+.chart-item.disabled {
+  opacity: 0.6;
+}
+
+.chart-item .level {
   font-weight: 600;
   color: #24292f;
 }
 
-.selected-icon {
-  color: #409eff;
-  font-size: 16px;
+.chart-item .mod-name {
+  color: #8c959f;
+  font-size: 10px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.conflict-warning {
+  margin-top: 4px;
+  align-self: flex-start;
+  width: auto;
+  max-width: none;
+}
+
+.conflict-warning :deep(.el-tag__content) {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex-wrap: nowrap;
+  white-space: nowrap;
+}
+
+.conflict-content {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  white-space: nowrap;
+}
+
+.conflict-warning .el-icon {
+  font-size: 10px;
   flex-shrink: 0;
 }
 
-.disabled-indicator {
-  position: absolute;
-  top: 4px;
-  right: 4px;
+.selected-icon {
+  color: #409eff;
+  font-size: 14px;
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+.no-difficulties {
+  padding: 20px 0;
 }
 
 /* Rest of the styles */
@@ -936,6 +1011,44 @@ const hasCredits = computed(() => {
   color: #656d76;
 }
 
+/* Wide screen optimizations (1024px and above) */
+@media (min-width: 1025px) {
+  .song-detail {
+    padding: 16px;
+  }
+
+  .song-header {
+    height: 90px;
+    min-height: 90px;
+  }
+
+  .song-icon {
+    width: 56px;
+    height: 56px;
+  }
+
+  .song-name {
+    font-size: 16px;
+  }
+
+  .difficulty-card {
+    min-width: 130px;
+    max-width: 160px;
+  }
+
+  .metadata-grid {
+    gap: 8px;
+  }
+
+  .metadata-item {
+    padding: 6px 10px;
+  }
+
+  .mod-item {
+    padding: 10px;
+  }
+}
+
 /* Mobile optimizations */
 @media (max-width: 768px) {
   .song-detail {
@@ -983,30 +1096,38 @@ const hasCredits = computed(() => {
     min-height: 48px;
   }
 
+  .style-group {
+    margin-bottom: 16px;
+  }
+
+  .style-title {
+    font-size: 14px;
+    margin-bottom: 10px;
+  }
+
+  .difficulty-cards {
+    gap: 8px;
+  }
+
   .difficulty-card {
     min-width: calc(50% - 4px);
     max-width: none;
-    height: 68px;
     flex: 0 0 calc(50% - 4px);
   }
 
   .difficulty-content {
-    padding: 0 10px;
-    gap: 8px;
+    padding: 8px 10px;
+    gap: 6px;
   }
 
   .difficulty-badge {
-    width: 36px;
-    height: 36px;
-    font-size: 13px;
+    width: 26px;
+    height: 26px;
+    font-size: 11px;
   }
 
   .difficulty-name {
-    font-size: 14px;
-  }
-
-  .difficulty-level {
-    font-size: 13px;
+    font-size: 12px;
   }
 
   .metadata-grid {
@@ -1126,32 +1247,39 @@ const hasCredits = computed(() => {
     margin-top: 6px;
   }
 
+  .style-title {
+    font-size: 13px;
+  }
+
   .difficulty-card {
     min-width: 100%;
     max-width: 100%;
-    height: 60px;
     flex: 0 0 100%;
   }
 
-  .difficulty-list {
+  .difficulty-cards {
     gap: 6px;
   }
 
   .difficulty-badge {
-    width: 32px;
-    height: 32px;
-    font-size: 12px;
+    width: 28px;
+    height: 28px;
+    font-size: 11px;
   }
 
   .difficulty-content {
-    padding: 0 10px;
-    gap: 8px;
+    padding: 8px 10px;
+    gap: 6px;
   }
 
   .difficulty-name {
-    font-size: 13px;
+    font-size: 12px;
     white-space: normal;
     word-break: break-word;
+  }
+
+  .chart-item {
+    font-size: 10px;
   }
 
   .action-section .el-button {

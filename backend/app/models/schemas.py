@@ -1,12 +1,50 @@
 """Pydantic schemas for API requests and responses."""
+from pathlib import Path
+
 from pydantic import BaseModel, Field, ConfigDict
 from typing import Optional, Any, List, Generic, TypeVar
 
 T = TypeVar("T")
 
 
+class ChartInfoDetail(BaseModel):
+    """Individual chart information from a specific mod."""
+    model_config = ConfigDict(populate_by_name=True)
+
+    level: float                  # Star rating
+    edition: int = 0              # Edition number
+    scriptPath: Optional[str] = None
+    isExtra: bool = False
+    isOriginal: bool = False
+    isSlide: bool = False
+    modId: int                    # Source mod ID
+    modName: Optional[str] = None # Source mod name
+    enabled: bool = True          # Whether this specific chart is enabled
+
+
+class DifficultyTypeDetail(BaseModel):
+    """Difficulty type containing all its charts across mods."""
+    model_config = ConfigDict(populate_by_name=True)
+
+    type: int                     # 0-4 (EASY to EXTRA_EXTREME)
+    name: str                     # "EASY", "NORMAL", etc.
+    shortName: str                # "E", "N", "H", "Ex", "EX"
+    chartInfos: List[ChartInfoDetail] = []  # Charts for this difficulty
+    hasEnabledCharts: bool = False  # Whether any chart in this difficulty is enabled
+
+
+class ChartStyleDetail(BaseModel):
+    """Chart style (ARCADE/CONSOLE/Mixed) containing all difficulties."""
+    model_config = ConfigDict(populate_by_name=True)
+
+    style: str                    # "ARCADE", "CONSOLE", "MIXED"
+    displayName: str              # "街机", "主机", "混合"
+    difficulties: List[DifficultyTypeDetail] = []
+    hasEnabledDifficulties: bool = False
+
+
 class DifficultyDetail(BaseModel):
-    """Detailed difficulty information."""
+    """[DEPRECATED] Old flat difficulty structure - kept for reference."""
     model_config = ConfigDict(populate_by_name=True)
 
     type: int
@@ -28,7 +66,7 @@ class ModInfoResponse(BaseModel):
 
     id: int
     name: str
-    path: Optional[str]
+    path: Optional[Path]
     enabled: bool
     author: Optional[str] = None
     version: Optional[str] = None
@@ -42,10 +80,8 @@ class SongResponse(BaseModel):
     name: str  # 日文原名
     nameEn: Optional[str] = None
     nameReading: Optional[str] = None
-    difficultyDetails: List[DifficultyDetail] = []
+    difficultyDetails: List[ChartStyleDetail] = []  # 新的层级结构：ChartStyle -> DifficultyType -> ChartInfo
     hidden: bool = False
-    modPath: Optional[str] = None
-    modInfo: Optional[ModInfoResponse] = None  # Mod信息（单个，向后兼容）
     modInfos: List[ModInfoResponse] = []  # 所有关联的Mod信息列表
     modEnabled: bool = True  # Mod是否启用
     isVanilla: bool = False  # 是否为原版歌曲
@@ -66,38 +102,114 @@ class SongResponse(BaseModel):
 
     @classmethod
     def from_song(cls, song, favorites: set[int] | None = None) -> "SongResponse":
-        """Create SongResponse from a Song dataclass."""
-        # Build Mod enabled status lookup table: mod_id -> is_enabled
-        mod_enabled_map = {m.id: m.enabled for m in song.mod_infos}
+        """Create SongResponse from a Song dataclass with hierarchical difficulty structure."""
+        from app.models.song import ChartStyle, DifficultyType
 
-        # Build difficulty details with enabled status
+        # Build Mod lookup: mod_id -> ModInfo
+        mod_map = {m.id: m for m in song.mod_infos}
+
+        # Group chart_infos by ChartStyle and then by DifficultyType
+        # Structure: {ChartStyle: {DifficultyType: [ChartInfo]}}
+        style_groups: dict[ChartStyle, dict[DifficultyType, list]] = {}
+
+        for chart in song.chart_infos:
+            style = chart.style if chart.style else ChartStyle.MIXED
+            diff_type = chart.type
+
+            if style not in style_groups:
+                style_groups[style] = {}
+            if diff_type not in style_groups[style]:
+                style_groups[style][diff_type] = []
+
+            style_groups[style][diff_type].append(chart)
+
+        # Build hierarchical difficulty details
         difficulty_details = []
-        for d in song.chart_infos:
-            # Original difficulty is always enabled
-            if d.is_original:
-                is_difficulty_enabled = True
-            else:
-                # Check if any mod providing this difficulty is enabled
-                is_difficulty_enabled = any(
-                    mod_enabled_map.get(mod_id, False)
-                    for mod_id in d.mod_ids
-                ) if d.mod_ids else song.is_vanilla
 
-            difficulty_details.append(
-                DifficultyDetail(
-                    type=d.type.value,
-                    name=d.type.display_name,
-                    level=d.level,
-                    edition=d.edition,
-                    scriptPath=d.script_file_name,
-                    isExtra=d.is_extra,
-                    isOriginal=d.is_original,
-                    isSlide=d.is_slide,
-                    index=d.index,
-                    modIds=list(d.mod_ids),  # set 转 list
-                    enabled=is_difficulty_enabled,
+        # Define style order and display names
+        style_order = [ChartStyle.ARCADE, ChartStyle.CONSOLE, ChartStyle.MIXED]
+        style_display_names = {
+            ChartStyle.ARCADE: "Arcade",
+            ChartStyle.CONSOLE: "Console",
+            ChartStyle.MIXED: "Mixed",
+        }
+
+        # Define difficulty order
+        diff_order = [
+            DifficultyType.EASY,
+            DifficultyType.NORMAL,
+            DifficultyType.HARD,
+            DifficultyType.EXTREME,
+            DifficultyType.EXTRA_EXTREME,
+        ]
+
+        for style in style_order:
+            if style not in style_groups:
+                continue
+
+            style_difficulties = []
+            style_has_enabled = False
+
+            for diff_type in diff_order:
+                if diff_type not in style_groups[style]:
+                    continue
+
+                charts = style_groups[style][diff_type]
+                chart_infos = []
+                diff_has_enabled = False
+
+                for chart in charts:
+                    # Determine if chart is enabled
+                    if chart.is_original:
+                        is_enabled = True
+                    else:
+                        mod = mod_map.get(chart.mod_id)
+                        is_enabled = mod.enabled if mod else song.is_vanilla
+
+                    if is_enabled:
+                        diff_has_enabled = True
+                        style_has_enabled = True
+
+                    # Get mod name
+                    mod = mod_map.get(chart.mod_id)
+                    mod_name = mod.name if mod else None
+
+                    chart_infos.append(
+                        ChartInfoDetail(
+                            level=chart.level,
+                            edition=chart.edition,
+                            scriptPath=chart.script_file_name,
+                            isExtra=chart.is_extra,
+                            isOriginal=chart.is_original,
+                            isSlide=chart.is_slide,
+                            modId=chart.mod_id,
+                            modName=mod_name,
+                            enabled=is_enabled,
+                        )
+                    )
+
+                # Sort chart_infos: enabled first, then by level
+                chart_infos.sort(key=lambda c: (-c.enabled, -c.level))
+
+                style_difficulties.append(
+                    DifficultyTypeDetail(
+                        type=diff_type.value,
+                        name=diff_type.display_name,
+                        shortName=diff_type.short_name,
+                        chartInfos=chart_infos,
+                        hasEnabledCharts=diff_has_enabled,
+                    )
                 )
-            )
+
+            if style_difficulties:
+                difficulty_details.append(
+                    ChartStyleDetail(
+                        style=style.value,
+                        displayName=style_display_names.get(style, style.value),
+                        difficulties=style_difficulties,
+                        hasEnabledDifficulties=style_has_enabled,
+                    )
+                )
 
         return cls(
             id=song.id,
@@ -106,15 +218,6 @@ class SongResponse(BaseModel):
             nameReading=song.name_reading,
             difficultyDetails=difficulty_details,
             hidden=song.hidden,
-            modPath=song.mod_path,
-            modInfo=ModInfoResponse(
-                id=song.mod_info.id,
-                name=song.mod_info.name,
-                path=song.mod_info.path,
-                enabled=song.mod_info.enabled,
-                author=song.mod_info.author,
-                version=song.mod_info.version,
-            ) if song.mod_info else None,
             modInfos=[
                 ModInfoResponse(
                     id=m.id,
@@ -126,7 +229,6 @@ class SongResponse(BaseModel):
                 ) for m in song.mod_infos
             ],
             # For multiple mods: if any mod is enabled, modEnabled is True
-            # This ensures song is usable if at least one mod is enabled
             modEnabled=any(m.enabled for m in song.mod_infos) if song.mod_infos else song.mod_enabled,
             isVanilla=song.is_vanilla,
             bpm=song.bpm,
@@ -188,6 +290,8 @@ class GameStatusResponse(BaseModel):
     edenVersion: bool = False
     edenOffset: int = 0
     currentSongInfo: Optional[CurrentSongInfo] = None  # 新增：当前歌曲信息
+    currentChartStyle: Optional[str] = None  # 新增：当前 ChartStyle (ARCADE/CONSOLE/MIXED)
+    isIngame: bool = False  # 新增：是否正在游玩中
 
 
 class SwitchSongRequest(BaseModel):
@@ -196,6 +300,7 @@ class SwitchSongRequest(BaseModel):
 
     songId: int = Field(..., description="The song ID to switch to")
     difficulty: int = Field(default=2, ge=0, le=5, description="Difficulty level (0-5)")
+    style: str = Field(default="ARCADE", description="Chart style (ARCADE, CONSOLE, MIXED)")
     force: bool = Field(default=False, description="Force switch even if game state is invalid")
 
 

@@ -29,7 +29,8 @@ const selectedSong = computed(() => {
   return songStore.songs.find(s => s.id === songStore.selectedId) || null
 })
 
-const selectedDifficulty = computed(() => songStore.selectedDifficulty)
+const selectedStyle = computed(() => songStore.selectedStyle)
+const selectedDifficultyType = computed(() => songStore.selectedDifficultyType)
 
 // Refresh interval in seconds for the slider
 const refreshIntervalSeconds = computed({
@@ -69,12 +70,12 @@ const handleSongSelect = async (song: Song) => {
   selectedSongData.value = song
 }
 
-const handleDifficultySelect = (difficulty: string) => {
-  songStore.selectDifficulty(difficulty)
+const handleDifficultySelect = (style: string, difficultyType: number) => {
+  songStore.selectDifficulty(style, difficultyType)
 }
 
 const handleSwitchSong = async () => {
-  if (!selectedSong.value || !selectedDifficulty.value) {
+  if (!selectedSong.value || selectedDifficultyType.value === null) {
     ElMessage.warning('请先选择歌曲和难度')
     return
   }
@@ -188,7 +189,8 @@ const handleCurrentSongClick = async (songId: number) => {
           <el-card shadow="never" class="detail-card">
             <SongDetail
               :song="selectedSong"
-              :selected-difficulty="selectedDifficulty"
+              :selected-style="selectedStyle"
+              :selected-difficulty-type="selectedDifficultyType"
               :game-running="gameStore.isRunning"
               :is-mod-enabled="selectedSong?.modEnabled"
               :is-favorite="selectedSong ? songStore.isFavorite(selectedSong.id) : false"

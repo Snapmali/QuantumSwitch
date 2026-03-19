@@ -11,7 +11,8 @@ export const useSongStore = defineStore('songs', () => {
   const reloading = ref(false)
   const error = ref<string | null>(null)
   const selectedId = ref<number | null>(null)
-  const selectedDifficulty = ref<string | null>(null)
+  const selectedStyle = ref<string | null>(null)
+  const selectedDifficultyType = ref<number | null>(null)
 
   // Pagination state
   const currentPage = ref(1)
@@ -214,40 +215,28 @@ export const useSongStore = defineStore('songs', () => {
   async function selectSong(song: Song) {
     selectedId.value = song.id
     // 选择新歌曲时重置难度选择
-    selectedDifficulty.value = null
+    selectedStyle.value = null
+    selectedDifficultyType.value = null
     // 直接使用列表中的歌曲数据，只需要单独获取收藏状态
     selectedSongFavorite.value = song.isFavorite || false
   }
 
-  function selectDifficulty(difficulty: string) {
-    selectedDifficulty.value = difficulty
+  function selectDifficulty(style: string, difficultyType: number) {
+    selectedStyle.value = style
+    selectedDifficultyType.value = difficultyType
   }
 
   async function switchToCurrentSong() {
-    if (!selectedId.value || !selectedDifficulty.value) {
+    if (!selectedId.value || selectedDifficultyType.value === null) {
       ElMessage.warning('请先选择歌曲和难度')
-      return false
-    }
-
-    // 将难度名称转换为难度类型数值
-    const difficultyMap: Record<string, number> = {
-      'EASY': 0,
-      'NORMAL': 1,
-      'HARD': 2,
-      'EXTREME': 3,
-      'EXTRA EXTREME': 4,
-    }
-
-    const difficultyValue = difficultyMap[selectedDifficulty.value]
-    if (difficultyValue === undefined) {
-      ElMessage.error('未知的难度类型')
       return false
     }
 
     try {
       const response = await gameApi.switchSong({
         songId: selectedId.value,
-        difficulty: difficultyValue,
+        difficulty: selectedDifficultyType.value,
+        style: selectedStyle.value || 'ARCADE',
       })
 
       const result = response.data.data
@@ -273,7 +262,8 @@ export const useSongStore = defineStore('songs', () => {
     reloading,
     error,
     selectedId,
-    selectedDifficulty,
+    selectedStyle,
+    selectedDifficultyType,
     currentPage,
     pageSize,
     total,

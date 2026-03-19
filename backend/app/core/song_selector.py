@@ -18,15 +18,39 @@ Core Logic Acknowledgment:
 import time
 from enum import Enum
 from typing import Optional, Tuple
+
+from app.models import ChartStyle
 from app.models.song import Song, DifficultyType
 from app.utils.logger import logger
-from app.config import settings, DllSettings
+from app.config import settings, DllEnum, DllPatternOffset
 
 
 class SwitchMode(Enum):
     """Song switch modes."""
     STANDARD = "standard"  # Normal switch when in song selection (state 6)
     DELAYED = "delayed"    # Delayed switch when in PV selection (state 5)
+
+
+class ChartStyleMapping:
+    """双向 ChartStyle 映射，支持 style -> 内存值 和 内存值 -> style 的转换"""
+
+    _STYLE_TO_VALUE = {
+        ChartStyle.ARCADE: 0,
+        ChartStyle.CONSOLE: 1,
+        ChartStyle.MIXED: 2,
+    }
+
+    _VALUE_TO_STYLE = {v: k for k, v in _STYLE_TO_VALUE.items()}
+
+    @classmethod
+    def to_value(cls, style: ChartStyle) -> int:
+        """ChartStyle -> 内存值 (默认返回 0)"""
+        return cls._STYLE_TO_VALUE.get(style, 0)
+
+    @classmethod
+    def from_value(cls, value: int) -> ChartStyle:
+        """内存值 -> ChartStyle (默认返回 ARCADE)"""
+        return cls._VALUE_TO_STYLE.get(value, ChartStyle.ARCADE)
 
 
 class SongSelector:
@@ -91,7 +115,7 @@ class SongSelector:
         self,
         song: Song,
         difficulty: DifficultyType = DifficultyType.HARD,
-        console: bool = False
+        style: ChartStyle = ChartStyle.ARCADE
     ) -> Tuple[bool, str, Optional[DifficultyType], Optional[SwitchMode]]:
         """
         Switch to the specified song and difficulty.
@@ -99,7 +123,7 @@ class SongSelector:
         Args:
             song: The song to switch to
             difficulty: The desired difficulty
-            console: Switch to the console mode
+            style: The target chart style
 
         Returns:
             Tuple of (success, message, actual_difficulty, mode)
@@ -118,9 +142,9 @@ class SongSelector:
 
         # Execute the appropriate switch method
         if mode == SwitchMode.STANDARD:
-            success = self._execute_standard_switch(song, actual_difficulty, console)
+            success = self._execute_standard_switch(song, actual_difficulty, style)
         else:
-            success = self._execute_delayed_switch(song, actual_difficulty, console)
+            success = self._execute_delayed_switch(song, actual_difficulty, style)
 
         if success:
             message = f"Successfully switched to '{song.name}' ({actual_difficulty.display_name})"
@@ -131,7 +155,7 @@ class SongSelector:
 
         return success, message, actual_difficulty, mode
 
-    def _execute_standard_switch(self, song: Song, difficulty: DifficultyType, console: bool = False) -> bool:
+    def _execute_standard_switch(self, song: Song, difficulty: DifficultyType, style: ChartStyle = ChartStyle.ARCADE) -> bool:
         """
         Execute standard song switch (when in song selection state).
 
@@ -171,14 +195,15 @@ class SongSelector:
                 logger.error("Failed to write PVID")
                 return False
 
-            # Set game mode (Arcade or Console)
-            if console:
-                if not self._mem.write_int(settings.CONSOLE_MODE_CHANGE_ADDR, 1, dll=DllSettings.NEW_CLASSICS):
-                    logger.error("Failed to write CONSOLE_MODE")
-                    return False
-            else:
-                if not self._mem.write_int(settings.CONSOLE_MODE_CHANGE_ADDR, 0, dll=DllSettings.NEW_CLASSICS):
-                    logger.error("Failed to write CONSOLE_MODE")
+            if self._mem.get_cached_dll_base(DllEnum.NEW_CLASSICS):
+                # Set chart style (Arcade / Console / Mixed)
+                style_offset = self._mem.read_int(0, dll_pattern_offset=DllPatternOffset.CHART_STYLE_OFFSET)
+                if not self._mem.write_int(
+                        style_offset + 4,
+                        ChartStyleMapping.to_value(style),
+                        dll_pattern_offset=DllPatternOffset.CHART_STYLE_OFFSET
+                ):
+                    logger.error("Failed to write CHART_STYLE")
                     return False
 
             # Step 7: Set sort (selectSort)
@@ -215,7 +240,7 @@ class SongSelector:
             logger.exception(f"Error during standard switch: {e}")
             return False
 
-    def _execute_delayed_switch(self, song: Song, difficulty: DifficultyType, console: bool = False) -> bool:
+    def _execute_delayed_switch(self, song: Song, difficulty: DifficultyType, style: ChartStyle = ChartStyle.ARCADE) -> bool:
         """
         Execute delayed song switch (when in PV selection state).
         Changes are buffered and applied when user enters song selection.
@@ -240,14 +265,15 @@ class SongSelector:
                 logger.error("Delayed mode: Failed to write PVID")
                 return False
 
-            # Set game mode (Arcade or Console)
-            if console:
-                if not self._mem.write_int(settings.CONSOLE_MODE_CHANGE_ADDR, 1, dll=DllSettings.NEW_CLASSICS):
-                    logger.error("Delayed mode: Failed to write CONSOLE_MODE")
-                    return False
-            else:
-                if not self._mem.write_int(settings.CONSOLE_MODE_CHANGE_ADDR, 0, dll=DllSettings.NEW_CLASSICS):
-                    logger.error("Delayed mode: Failed to write CONSOLE_MODE")
+            if self._mem.get_cached_dll_base(DllEnum.NEW_CLASSICS):
+                # Set chart style (Arcade / Console / Mixed)
+                style_offset = self._mem.read_int(0, dll_pattern_offset=DllPatternOffset.CHART_STYLE_OFFSET)
+                if not self._mem.write_int(
+                        style_offset + 4,
+                        ChartStyleMapping.to_value(style),
+                        dll_pattern_offset=DllPatternOffset.CHART_STYLE_OFFSET
+                ):
+                    logger.error("Failed to write CHART_STYLE")
                     return False
 
             # Write LAST_SELECT_SORT_ADDR = 1 (sort by difficulty level)
@@ -273,7 +299,7 @@ class SongSelector:
             logger.exception(f"Error during delayed switch: {e}")
             return False
 
-    def get_current_selection(self) -> Tuple[Optional[int], Optional[bool]]:
+    def get_current_selection(self) -> Tuple[Optional[int], Optional[bool], Optional[ChartStyle]]:
         """
         Get the currently playing or selected song PVID.
 
@@ -285,12 +311,13 @@ class SongSelector:
                 - current_pvid: The current song PVID, or None if no song selected
                 - is_ingame: True if player is in-game (playing), False if in menu,
                            None if cannot read memory
+                - style: The current chart style
         """
         # Read game state to determine if player is in-game
         curr_pvid_base_addr = self._mem.read_int(settings.CURR_PVID_BASE_PTR_ADDR, size=8)
         if curr_pvid_base_addr is None:
             logger.warning("Failed to read CURR_PVID_BASE_PTR_ADDR, game may not be running")
-            return None, None
+            return None, None, None
         logger.debug(f"Read CURR_PVID_BASE_PTR_ADDR 0x{settings.CURR_PVID_BASE_PTR_ADDR:08X} = "
                     f"0x{curr_pvid_base_addr:08X} ({curr_pvid_base_addr})")
 
@@ -306,7 +333,7 @@ class SongSelector:
                                                - settings.CURR_PVID_SONG_SELECTION_OFFSET_PTR_OFFSET)
             if curr_pvid_song_selection_offset is None:
                 logger.warning("Failed to read CURR_PVID_SONG_SELECTION_OFFSET, game may not be running")
-                return None, None
+                return None, None, None
 
             current_pvid_addr = curr_pvid_base_addr + curr_pvid_song_selection_offset
             is_ingame = False
@@ -318,16 +345,23 @@ class SongSelector:
         if current_pvid is None:
             logger.warning(f"Failed to read CURR_PVID_BASE_ADDR 0x{curr_pvid_base_addr:08X}, "
                            f"game may not be running or not in the right state")
-            return None, None
+            return None, None, None
 
         # Check if no song is selected (empty PVID values)
         elif current_pvid == self.PVID_EMPTY_INGAME or current_pvid == self.PVID_EMPTY_SONG_SELECTION:
             logger.info(f"CURR_PVID_ADDR checked: 0x{current_pvid_addr:08X}, PVID: {current_pvid}, no song selected")
-            return None, None
+            return None, None, None
         else:
             logger.info(f"CURR_PVID_ADDR checked: 0x{current_pvid_addr:08X}, PVID: {current_pvid}, Ingame state: {is_ingame}")
 
-        return current_pvid, is_ingame
+        if self._mem.get_cached_dll_base(DllEnum.NEW_CLASSICS):
+            style_offset = self._mem.read_int(0, dll_pattern_offset=DllPatternOffset.CHART_STYLE_OFFSET)
+            style_value = self._mem.read_int(style_offset + 4, dll_pattern_offset=DllPatternOffset.CHART_STYLE_OFFSET)
+            style = ChartStyleMapping.from_value(style_value)
+        else:
+            style = ChartStyle.ARCADE
+
+        return current_pvid, is_ingame, style
 
     def get_last_selection(self) -> Tuple[Optional[int], Optional[int], Optional[int]]:
         """Get the currently selected song information."""

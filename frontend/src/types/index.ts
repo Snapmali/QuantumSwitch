@@ -108,10 +108,123 @@ export function formatLevel(level: number): string {
 }
 
 // ============================================
-// 接口定义
+// 新的层级结构辅助函数
 // ============================================
 
-// Difficulty detail information
+/** 获取 ChartStyle 的显示名称 */
+export function getChartStyleDisplayName(style: string): string {
+  const names: Record<string, string> = {
+    'ARCADE': 'Arcade',
+    'CONSOLE': 'Console',
+    'MIXED': 'Mixed',
+    'Mixed': 'Mixed',
+  }
+  return names[style] || style
+}
+
+/** 根据 style 和 type 查找对应的 DifficultyTypeDetail */
+export function findDifficultyDetail(
+  song: Song,
+  style: string,
+  difficultyType: number
+): DifficultyTypeDetail | undefined {
+  const styleDetail = song.difficultyDetails.find(s => s.style === style)
+  if (!styleDetail) return undefined
+  return styleDetail.difficulties.find(d => d.type === difficultyType)
+}
+
+/** 检查歌曲是否有特定难度类型 */
+export function hasDifficultyType(song: Song, difficultyType: number): boolean {
+  return song.difficultyDetails.some(style =>
+    style.difficulties.some(diff => diff.type === difficultyType && diff.hasEnabledCharts)
+  )
+}
+
+/** 获取歌曲的所有可用难度类型（去重） */
+export function getAvailableDifficultyTypes(song: Song): DifficultyTypeDetail[] {
+  const result: DifficultyTypeDetail[] = []
+  const seen = new Set<number>()
+
+  for (const style of song.difficultyDetails) {
+    for (const diff of style.difficulties) {
+      if (!seen.has(diff.type) && diff.hasEnabledCharts) {
+        result.push(diff)
+        seen.add(diff.type)
+      }
+    }
+  }
+
+  // Sort by type number
+  result.sort((a, b) => a.type - b.type)
+  return result
+}
+
+/** 获取特定 Style 和 DifficultyType 的第一个启用的 ChartInfo */
+export function getFirstEnabledChartInfo(
+  song: Song,
+  style: string,
+  difficultyType: number
+): ChartInfoDetail | undefined {
+  const diffDetail = findDifficultyDetail(song, style, difficultyType)
+  if (!diffDetail) return undefined
+  return diffDetail.chartInfos.find(c => c.enabled)
+}
+
+/** 获取特定难度类型的首选 ChartInfo（跨所有 Styles） */
+export function getPreferredChartInfo(
+  song: Song,
+  difficultyType: number
+): { chartInfo?: ChartInfoDetail; style?: string } {
+  const styleOrder = ['ARCADE', 'CONSOLE', 'MIXED']
+
+  for (const style of styleOrder) {
+    const diff = findDifficultyDetail(song, style, difficultyType)
+    if (diff?.hasEnabledCharts) {
+      const chart = diff.chartInfos.find(c => c.enabled)
+      if (chart) {
+        return { chartInfo: chart, style }
+      }
+    }
+  }
+
+  return {}
+}
+
+// ============================================
+// 接口定义 - 新的层级结构
+// ============================================
+
+// Individual chart information from a specific mod
+export interface ChartInfoDetail {
+  level: number
+  edition?: number
+  scriptPath?: string
+  isExtra?: boolean
+  isOriginal?: boolean
+  isSlide?: boolean
+  modId: number
+  modName?: string
+  enabled?: boolean
+}
+
+// Difficulty type containing all its charts
+export interface DifficultyTypeDetail {
+  type: number
+  name: string
+  shortName: string
+  chartInfos: ChartInfoDetail[]
+  hasEnabledCharts?: boolean
+}
+
+// Chart style (ARCADE/CONSOLE/Mixed) containing all difficulties
+export interface ChartStyleDetail {
+  style: string  // "ARCADE", "CONSOLE", "MIXED"
+  displayName: string  // "街机", "主机", "混合"
+  difficulties: DifficultyTypeDetail[]
+  hasEnabledDifficulties?: boolean
+}
+
+// [DEPRECATED] Old flat difficulty structure - kept for reference
 export interface DifficultyDetail {
   type: number
   name: string
@@ -132,7 +245,7 @@ export interface Song {
   name: string  // Japanese name (priority)
   nameEn?: string
   nameReading?: string
-  difficultyDetails: DifficultyDetail[]
+  difficultyDetails: ChartStyleDetail[]  // 新的层级结构：ChartStyle -> DifficultyType -> ChartInfo
   hidden?: boolean
   modPath?: string
   modInfo?: ModInfo  // Mod information (single, for backward compatibility)
@@ -190,6 +303,8 @@ export interface GameStatus {
   edenVersion: boolean
   edenOffset: number
   currentSongInfo?: CurrentSongInfo  // 新增：当前歌曲信息
+  currentChartStyle?: string  // 新增：当前 ChartStyle (ARCADE/CONSOLE/MIXED)
+  isIngame?: boolean  // 新增：是否正在游玩中
 }
 
 // Game status display format for GameStatus component
@@ -202,6 +317,8 @@ export interface GameStatusDisplay {
     difficultyType: string
   }
   currentSongInfo?: CurrentSongInfo  // 新增：当前歌曲完整信息
+  currentChartStyle?: string  // 新增：当前 ChartStyle
+  isIngame?: boolean  // 新增：是否正在游玩中
 }
 
 // API response wrapper
@@ -228,6 +345,7 @@ export type SongListResponse = PaginatedResponse<Song>
 export interface SwitchSongRequest {
   songId: number
   difficulty: number
+  style?: string  // "ARCADE", "CONSOLE", "MIXED"
   force?: boolean
 }
 

@@ -34,7 +34,8 @@ logger.add(
     retention="7 days",
     format="{time:YYYY-MM-DD HH:mm:ss} | {level: <8} | {name}:{function}:{line} - {message}",
     level="DEBUG",
-    encoding="utf-8"
+    encoding="utf-8",
+    enqueue=True
 )
 
 __all__ = ["logger"]

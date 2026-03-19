@@ -9,9 +9,10 @@ import time
 from pathlib import Path
 from typing import Optional
 
-from app.config import settings, DllSettings
+from app.config import settings, DllEnum
 from app.core import SongSelector, MemoryOperator, ProcessManager
 from app.core.bootstrap import _init_game_directories
+from app.models import ChartStyle
 from app.models.song import Song, DifficultyType
 from app.utils.logger import logger
 
@@ -42,6 +43,18 @@ DIFFICULTY_MAP = {
     "extreme": DifficultyType.EXTREME,
     "extra_extreme": DifficultyType.EXTRA_EXTREME,
     "ex extreme": DifficultyType.EXTRA_EXTREME,
+}
+
+STYLE_MAP = {
+    "0": ChartStyle.ARCADE,
+    "1": ChartStyle.CONSOLE,
+    "2": ChartStyle.MIXED,
+    "a": ChartStyle.ARCADE,
+    "c": ChartStyle.CONSOLE,
+    "m": ChartStyle.MIXED,
+    "arcade": ChartStyle.ARCADE,
+    "console": ChartStyle.CONSOLE,
+    "mixed": ChartStyle.MIXED,
 }
 
 
@@ -79,7 +92,7 @@ def print_status():
     try:
         # Read key memory addresses
         menu = _mem.read_int(settings.CHANGE_SONG_SELECT_ADDR)
-        game_mode = _mem.read_int(settings.CONSOLE_MODE_CHANGE_ADDR, dll=DllSettings.NEW_CLASSICS)
+        game_mode = _mem.read_int(settings.CONSOLE_MODE_CHANGE_ADDR, dll=DllEnum.NEW_CLASSICS)
         pvid = _mem.read_int(settings.LAST_SELECT_PVID_ADDR, apply_eden=True)
         sort_id = _mem.read_int(settings.LAST_SELECT_SORT_ADDR, apply_eden=True)
         diff_type = _mem.read_int(settings.LAST_SELECT_DIFF_TYPE_ADDR, apply_eden=True)
@@ -125,6 +138,11 @@ def parse_difficulty(diff_input: str) -> Optional[DifficultyType]:
     """
     diff_lower = diff_input.strip().lower()
     return DIFFICULTY_MAP.get(diff_lower)
+
+def parse_style(style_input: str) -> Optional[ChartStyle]:
+    """Parse chart style from user input string."""
+    style_lower = style_input.strip().lower()
+    return STYLE_MAP.get(style_lower)
 
 
 def create_test_song(song_id: int) -> Song:
@@ -177,16 +195,19 @@ def switch_song_interactive():
         logger.error(f"Invalid difficulty: {diff_input}")
         return
 
-    # Get console mode
-    console_input = input("Console mode? (y/n) [n]: ").strip().lower()
-    console = console_input in ('y', 'yes', 'true', '1')
+    # Get chart style
+    print(f"\nStyle options: 0/A/arcade, 1/C/console, 2/M/mixed ")
+    style_input = input("Style [0/arcade]: ").strip()
+    if style_input == '':
+        style_input = "0"
+    style = parse_style(style_input)
 
     # Create song and switch
     song = create_test_song(song_id)
 
-    logger.info(f"Switching to song {song_id} with difficulty {difficulty.display_name}, console={console}")
+    logger.info(f"Switching to song {song_id} with difficulty {difficulty.display_name}, style={style}")
 
-    success, message, actual_diff, mode = _song_selector.switch_song(song, difficulty, console)
+    success, message, actual_diff, mode = _song_selector.switch_song(song, difficulty, style)
 
     if success:
         logger.info(f"Success: {message}")

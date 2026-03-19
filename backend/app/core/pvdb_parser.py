@@ -1,8 +1,9 @@
 """PVDB file parser for extracting song information."""
 import re
+
 import toml
 from collections import defaultdict
-from PyInstaller.log import level
+from dataclasses import dataclass, field
 
 import app.models.song as song_model
 from pathlib import Path
@@ -11,6 +12,57 @@ from app.models import Song, DifficultyType, ChartInfo, ChartStyle, NcSong, NcCh
 from app.models.mod_info import ModInfo
 from app.utils.logger import logger
 from app.config import DATA_DIR, IS_FROZEN
+
+
+@dataclass
+class SongBuilder:
+    """Type-safe builder for song data during parsing."""
+    song_id: int
+    mod_info: ModInfo
+    mod_enabled: bool = True
+    difficulties: List[DifficultyType] = field(default_factory=list)
+    difficulty_details: Dict[Tuple[DifficultyType, int], ChartInfo] = field(default_factory=dict)
+    hidden: bool = False
+    source_file: str = ""
+    is_vanilla: bool = False
+    attributes: Dict[str, str] = field(default_factory=dict)
+    # Song metadata
+    name: Optional[str] = None
+    name_en: Optional[str] = None
+    name_reading: Optional[str] = None
+    bpm: Optional[str] = None
+    description: Optional[str] = None
+    # Credits
+    music: Optional[str] = None
+    arranger: Optional[str] = None
+    lyrics: Optional[str] = None
+    guitar_player: Optional[str] = None
+    illustrator: Optional[str] = None
+    manipulator: Optional[str] = None
+    pv_editor: Optional[str] = None
+
+    def get_display_name(self) -> str:
+        """Get display name with priority: Japanese > English > Reading > ID."""
+        return self.name or self.name_en or self.name_reading or f"PV_{self.song_id:03d}"
+
+    def get_filtered_and_sorted_charts(self) -> List[ChartInfo]:
+        """Get charts filtered by script file existence and sorted by difficulty order."""
+        charts = []
+        for chart in self.difficulty_details.values():
+            if not chart.script_file_name or not chart.script_file_name.strip():
+                continue
+            # Check if script file exists
+            if self.mod_info.path and not (self.mod_info.path / chart.script_file_name).exists():
+                continue
+            charts.append(chart)
+        charts.sort(key=lambda c: _get_difficulty_sort_key(c.type))
+        return charts
+
+
+def _get_difficulty_sort_key(diff_type: DifficultyType) -> int:
+    """Get sort key for difficulty type."""
+    order = {0: 0, 1: 1, 2: 2, 3: 3, 4: 4}
+    return order.get(diff_type.value, diff_type.value)
 
 
 class PvdbParser:
@@ -70,7 +122,7 @@ class PvdbParser:
 
     def get_song_by_id(self, song_id: int) -> Optional[Song]:
         """Get a song by its ID."""
-        # Auto-load songs if not already loaded
+        # Autoload songs if not already loaded
         if not self._song_map:
             self.scan_and_parse()
         return self._song_map.get(song_id)
@@ -110,6 +162,9 @@ class PvdbParser:
         self._songs = []
         self._song_map = {}
         self._hidden_songs = set()
+        self._mod_id_counter = 1  # 从 1 开始，原版使用 0
+        self._nc_songs = {}  # song_id -> List[NcSong]
+        self._mod_infos = {}
 
         # Collect scan results: (mod_info, pvdb_files, ncdb_file, is_vanilla)
         mod_results: List[tuple[ModInfo, List[Path], Optional[Path], bool]] = []
@@ -165,7 +220,7 @@ class PvdbParser:
                 try:
                     nc_songs_list = self._parse_ncdb_file(ncdb_file, mod_info)
                     for song_id, nc_song in nc_songs_list:
-                        self._nc_songs.get(song_id, []).append(nc_song)
+                        self._nc_songs.setdefault(song_id, []).append(nc_song)
                     logger.info(f"Parsed {len(nc_songs_list)} NC entries from {ncdb_file}")
                 except Exception as e:
                     logger.error(f"Error parsing {ncdb_file}: {e}")
@@ -189,6 +244,10 @@ class PvdbParser:
             # 遍历该歌曲的所有 NC 条目
             # Iterate through all NC entries for this song
             for nc_song in nc_list:
+                # Merge mod info
+                if nc_song.mod_info and nc_song.mod_info not in song.mod_infos:
+                    song.mod_infos.append(nc_song.mod_info)
+
                 mod_charts = mod_charts_map.get(nc_song.mod_id, [])
 
                 # 建立 (difficulty_type, script_file_name) -> ChartInfo 的映射
@@ -434,7 +493,7 @@ class PvdbParser:
             mod_info = ModInfo(
                 id=self._mod_id_counter,
                 name=name,
-                path=str(mod_path),
+                path=mod_path,
                 enabled=enabled,
                 author=author,
                 version=version
@@ -454,27 +513,35 @@ class PvdbParser:
             is_vanilla: Whether this file is from vanilla directory
         """
         logger.info(f"Parsing {file_path} (vanilla={is_vanilla})")
-        mod_path = mod_info.path
 
+        # Get rom directory (parent of the pv_db file)
+        rom_dir = file_path.parent
+
+        # Parse file content into song builders
+        builders = self._parse_pvdb_content(file_path, mod_info, is_vanilla, rom_dir)
+
+        # Convert builders to Song objects
+        for builder in builders.values():
+            self._convert_builder_to_song(builder, file_path)
+
+    def _parse_pvdb_content(self, file_path: Path, mod_info: ModInfo, is_vanilla: bool, rom_dir: Path) -> Dict[int, SongBuilder]:
+        """Parse PVDB file content into song builders."""
         with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
             content = f.read()
 
-        # Parse entries
-        lines = content.split('\n')
-        current_songs: Dict[int, Dict] = {}
+        builders: Dict[int, SongBuilder] = {}
 
-        for line in lines:
-            original_line = line  # Keep original for #hide# check
+        for line in content.split('\n'):
             line = line.strip()
             if not line:
                 continue
 
-            # Check for hidden song marker (#hide#pv_XXX...)
+            # Handle hidden marker (#hide#pv_XXX...)
             is_hidden = line.startswith('#hide#')
             if is_hidden:
-                line = line[6:]  # Remove #hide# prefix
+                line = line[6:]
 
-            # Skip pure comment lines (but not #hide# lines)
+            # Skip pure comment lines
             if line.startswith('#') and not line.startswith('pv_'):
                 continue
 
@@ -486,79 +553,198 @@ class PvdbParser:
             attr_name = match.group(2)
             attr_value = match.group(3) or ""
 
-            if pv_num not in current_songs:
-                current_songs[pv_num] = {
-                    'id': pv_num,
-                    'difficulties': [],
-                    'difficulty_details': {},  # Map<DifficultyType, DifficultyInfo>
-                    'hidden': False,
-                    'source_file': str(file_path),
-                    'mod_info': mod_info,
-                    'mod_enabled': mod_info.enabled if mod_info else True,
-                    'is_vanilla': is_vanilla,  # Mark as vanilla song
-                    'attributes': {},  # All raw PVDB attributes
-                }
-
-            # Store original attribute
-            current_songs[pv_num]['attributes'][attr_name] = attr_value
-
-            # Check hidden status from line prefix
-            if is_hidden:
-                current_songs[pv_num]['hidden'] = True
-
-            self._parse_attribute(current_songs[pv_num], attr_name, attr_value)
-
-        # Convert to Song objects
-        for pv_num, data in current_songs.items():
-            if pv_num in self._song_map:
-                # Merge with existing song, passing is_vanilla from the current file
-                self._merge_song_data(self._song_map[pv_num], data, is_vanilla)
-            else:
-                # Build difficulty details list - only include difficulties with script files
-                difficulty_details = [
-                    d for d in data.get('difficulty_details', {}).values()
-                    if d.script_file_name and d.script_file_name.strip()  # Must have script file
-                ]
-                # Sort by difficulty order
-                difficulty_details.sort(key=lambda d: self.DIFFICULTY_ORDER.index(d.type.value) if d.type.value in self.DIFFICULTY_ORDER else d.type.value)
-
-                # Build difficulties list based on filtered and sorted order
-                difficulties = [d.type for d in difficulty_details]
-
-                # Get name with priority: Japanese > English > Reading > ID
-                name = data.get('name')
-                if not name:
-                    name = data.get('name_en') or data.get('name_reading') or f"PV_{data['id']:03d}"
-
-                song = Song(
-                    id=data['id'],
-                    name=name,
-                    name_en=data.get('name_en'),
-                    name_reading=data.get('name_reading'),
-                    difficulties=difficulties,
-                    chart_infos=difficulty_details,
-                    hidden=data.get('hidden', False),
-                    mod_infos=[mod_info],
-                    mod_enabled=data.get('mod_enabled', True),
-                    is_vanilla=data.get('is_vanilla', False),
-                    bpm=data.get('bpm'),
-                    description=data.get('description'),
-                    attributes=data.get('attributes', {}),
-                    # Song credits from songinfo
-                    music=data.get('music'),
-                    arranger=data.get('arranger'),
-                    lyrics=data.get('lyrics'),
-                    guitar_player=data.get('guitar_player'),
-                    illustrator=data.get('illustrator'),
-                    manipulator=data.get('manipulator'),
-                    pv_editor=data.get('pv_editor'),
+            if pv_num not in builders:
+                builders[pv_num] = SongBuilder(
+                    song_id=pv_num,
+                    source_file=str(file_path),
+                    mod_info=mod_info,
+                    mod_enabled=mod_info.enabled,
+                    is_vanilla=is_vanilla
                 )
 
-                self._songs.append(song)
-                self._song_map[pv_num] = song
+            builders[pv_num].attributes[attr_name] = attr_value
 
-                if song.hidden:
-                    self._hidden_songs.add(pv_num)
+            if is_hidden:
+                builders[pv_num].hidden = True
+
+            self._parse_attribute_to_builder(builders[pv_num], attr_name, attr_value)
+
+        return builders
+
+    def _convert_builder_to_song(self, builder: SongBuilder, file_path: Path) -> None:
+        """Convert SongBuilder to Song and add to collection."""
+        if builder.song_id in self._song_map:
+            self._merge_song_builder(self._song_map[builder.song_id], builder)
+        else:
+            song = self._create_song_from_builder(builder)
+            self._songs.append(song)
+            self._song_map[builder.song_id] = song
+
+            if song.hidden:
+                self._hidden_songs.add(builder.song_id)
+
+    def _create_song_from_builder(self, builder: SongBuilder) -> Song:
+        """Create a Song object from SongBuilder."""
+        charts = builder.get_filtered_and_sorted_charts()
+
+        return Song(
+            id=builder.song_id,
+            name=builder.get_display_name(),
+            name_en=builder.name_en,
+            name_reading=builder.name_reading,
+            difficulties=[c.type for c in charts],
+            chart_infos=charts,
+            hidden=builder.hidden,
+            mod_infos=[builder.mod_info] if builder.mod_info else [],
+            mod_enabled=builder.mod_enabled,
+            is_vanilla=builder.is_vanilla,
+            bpm=builder.bpm,
+            description=builder.description,
+            attributes=builder.attributes,
+            music=builder.music,
+            arranger=builder.arranger,
+            lyrics=builder.lyrics,
+            guitar_player=builder.guitar_player,
+            illustrator=builder.illustrator,
+            manipulator=builder.manipulator,
+            pv_editor=builder.pv_editor,
+        )
+
+    def _merge_song_builder(self, existing: Song, builder: SongBuilder) -> None:
+        """Merge SongBuilder data into existing Song."""
+        # Build lookup set of existing charts by (mod_id, script_file_name)
+        existing_chart_keys: Set[Tuple[Optional[int], Optional[str]]] = {
+            (chart.mod_id, chart.script_file_name) for chart in existing.chart_infos
+        }
+
+        # Add new charts (with file existence check and deduplication)
+        for chart in builder.get_filtered_and_sorted_charts():
+            chart_key = (chart.mod_id, chart.script_file_name)
+            if chart_key not in existing_chart_keys:
+                existing.chart_infos.append(chart)
+                existing_chart_keys.add(chart_key)
+
+        # Re-sort and rebuild difficulties list
+        existing.chart_infos.sort(key=lambda c: _get_difficulty_sort_key(c.type))
+        existing.difficulties = [c.type for c in existing.chart_infos]
+
+        # Update hidden status
+        if builder.hidden:
+            existing.hidden = True
+            self._hidden_songs.add(existing.id)
+
+        # Merge mod info
+        if builder.mod_info and builder.mod_info not in existing.mod_infos:
+            existing.mod_infos.append(builder.mod_info)
+
+        # Update vanilla status
+        if builder.is_vanilla:
+            existing.is_vanilla = True
+
+        # Update mod_enabled (OR logic)
+        existing.mod_enabled = existing.mod_enabled or builder.mod_enabled
+
+        # Merge attributes
+        existing.attributes.update(builder.attributes)
+
+        # Update fields if not already set
+        if not existing.name_en and builder.name_en:
+            existing.name_en = builder.name_en
+        if not existing.name_reading and builder.name_reading:
+            existing.name_reading = builder.name_reading
+        if not existing.arranger and builder.arranger:
+            existing.arranger = builder.arranger
+
+    def _parse_attribute_to_builder(self, builder: SongBuilder, attr_name: str, attr_value: str) -> None:
+        """Parse a single attribute into SongBuilder."""
+        # Song names
+        if attr_name == 'song_name':
+            builder.name = attr_value.strip('"')
+        elif attr_name == 'song_name_en':
+            builder.name_en = attr_value.strip('"')
+        elif attr_name == 'song_name_reading':
+            builder.name_reading = attr_value.strip('"')
+        elif attr_name == 'song_file_name':
+            builder.attributes['song_file'] = attr_value.strip('"')
+        elif attr_name == 'performer_num':
+            builder.attributes['performer_count'] = attr_value if attr_value.isdigit() else '1'
+        elif attr_name == 'date':
+            builder.attributes['date'] = attr_value
+        elif attr_name == 'hidden':
+            builder.hidden = attr_value == '1'
+        elif attr_name == 'bpm':
+            builder.bpm = attr_value
+        elif attr_name.startswith('songinfo.'):
+            self._parse_songinfo_attribute(builder, attr_name, attr_value, '')
+        elif attr_name.startswith('songinfo_en.'):
+            self._parse_songinfo_attribute(builder, attr_name, attr_value, '_en')
+        elif attr_name == 'sort_index':
+            builder.attributes['sort_id'] = attr_value if attr_value.isdigit() else str(builder.song_id)
+        else:
+            # Parse difficulty attributes
+            self._parse_difficulty_attribute(builder, attr_name, attr_value)
+
+    def _parse_songinfo_attribute(self, builder: SongBuilder, attr_name: str, attr_value: str, suffix: str) -> None:
+        """Parse songinfo attribute into builder."""
+        info_attr = attr_name.split('.')[1] if '.' in attr_name else ''
+        field_name = info_attr + suffix
+        if hasattr(builder, field_name):
+            setattr(builder, field_name, attr_value.strip('"'))
+
+    def _parse_difficulty_attribute(self, builder: SongBuilder, attr_name: str, attr_value: str) -> None:
+        """Parse difficulty-related attribute into builder."""
+        diff_match = self.DIFF_ATTR_PATTERN.match(attr_name)
+        if not diff_match:
+            return
+
+        diff_type_name = diff_match.group(1).lower()
+        diff_index = int(diff_match.group(2))
+        diff_attr = diff_match.group(3)
+
+        diff_type = song_model.parse_difficulty_type(diff_type_name)
+        if diff_type:
+            self._update_builder_difficulty(builder, diff_type, diff_attr, attr_value, diff_index)
+
+    def _update_builder_difficulty(self, builder: SongBuilder, diff_type: DifficultyType,
+                                    attr: str, value: str, index: int = 0) -> None:
+        """Update difficulty information in SongBuilder."""
+        diff_key = (diff_type, index)
+
+        if diff_key not in builder.difficulty_details:
+            # Determine actual type (EXTREME with index > 0 could be EXTRA EXTREME)
+            actual_type = diff_type
+            is_extra = diff_type == DifficultyType.EXTREME and index > 0
+            if is_extra:
+                actual_type = DifficultyType.EXTRA_EXTREME
+
+            builder.difficulty_details[diff_key] = ChartInfo(
+                style=ChartStyle.ARCADE,
+                type=actual_type,
+                index=index,
+                is_extra=is_extra
+            )
+
+        chart = builder.difficulty_details[diff_key]
+
+        # Record mod_id
+        if builder.mod_info and builder.mod_info.id is not None:
+            chart.mod_id = builder.mod_info.id
+
+        # Update chart attributes
+        if attr == 'edition':
+            chart.edition = int(value) if value.isdigit() else 0
+        elif attr == 'level':
+            chart.level = self._parse_level(value)
+        elif attr == 'script_file_name':
+            chart.script_file_name = value.strip('"')
+        elif attr == 'attribute.extra' and value.strip() == '1':
+            chart.is_extra = True
+            if chart.type == DifficultyType.EXTREME:
+                chart.type = DifficultyType.EXTRA_EXTREME
+        elif attr == 'attribute.original':
+            chart.is_original = value.strip() == '1'
+        elif attr == 'attribute.slide':
+            chart.is_slide = value.strip() == '1'
 
     def _parse_ncdb_file(self, file_path: Path, mod_info: ModInfo) -> List[Tuple[int, NcSong]]:
         """Parse a single NC database TOML file.
@@ -608,15 +794,19 @@ class PvdbParser:
                         continue
 
                     style_str = entry.get('style', 'ARCADE')
-                    try:
-                        style = ChartStyle(style_str)
-                    except ValueError:
+
+                    # 尝试大小写不敏感匹配
+                    style = ChartStyle.from_string(style_str)
+                    if style is None:
                         style = ChartStyle.ARCADE  # Default to ARCADE if invalid
 
                     level_raw = entry.get('level')
                     level = self._parse_level(level_raw) if level_raw else None
 
                     script_file = entry.get('script_file_name')
+
+                    if script_file and mod_info.path and not (mod_info.path / script_file).exists():
+                        continue
 
                     difficulty = NcChartInfo(
                         difficulty_type=diff_type,
@@ -628,228 +818,14 @@ class PvdbParser:
 
             nc_song = NcSong(
                 song_id=song_id,
+                mod_info=mod_info,
+                mod_id=mod_id,
                 chart_infos=difficulties,
-                source_file=str(file_path),
-                mod_id=mod_id
+                source_file=str(file_path)
             )
             nc_songs.append((song_id, nc_song))
 
         return nc_songs
-
-    def _parse_attribute(self, data: Dict, attr_name: str, attr_value: str) -> None:
-        """Parse a single attribute."""
-        # Song names - priority: song_name (Japanese) > song_name_en > song_name_reading
-        if attr_name == 'song_name':
-            data['name'] = attr_value.strip('"')
-
-        elif attr_name == 'song_name_en':
-            data['name_en'] = attr_value.strip('"')
-
-        elif attr_name == 'song_name_reading':
-            data['name_reading'] = attr_value.strip('"')
-
-        elif attr_name == 'song_file_name':
-            data['song_file'] = attr_value.strip('"')
-
-        elif attr_name == 'sabi_start_time':
-            data['sabi_start'] = attr_value
-
-        elif attr_name == 'sabi_play_time':
-            data['sabi_duration'] = attr_value
-
-        elif attr_name == 'performer_num':
-            data['performer_count'] = int(attr_value) if attr_value.isdigit() else 1
-
-        elif attr_name == 'date':
-            data['date'] = attr_value
-
-        elif attr_name == 'song_video_re':
-            data['has_video'] = attr_value == '1'
-
-        elif attr_name == 'song_video_omake':
-            data['has_omake'] = attr_value == '1'
-
-        elif attr_name == 'hidden':
-            data['hidden'] = attr_value == '1'
-
-        elif attr_name == 'bpm':
-            data['bpm'] = attr_value
-
-        elif attr_name.startswith('songinfo.'):
-            # Parse songinfo attributes
-            info_attr = attr_name.split('.')[1] if '.' in attr_name else ''
-            if info_attr == 'music':
-                data['music'] = attr_value.strip('"')
-            elif info_attr == 'lyrics':
-                data['lyrics'] = attr_value.strip('"')
-            elif info_attr == 'arranger':
-                data['arranger'] = attr_value.strip('"')
-            elif info_attr == 'guitar_player':
-                data['guitar_player'] = attr_value.strip('"')
-            elif info_attr == 'illustrator':
-                data['illustrator'] = attr_value.strip('"')
-            elif info_attr == 'manipulator':
-                data['manipulator'] = attr_value.strip('"')
-            elif info_attr == 'pv_editor':
-                data['pv_editor'] = attr_value.strip('"')
-
-        elif attr_name.startswith('songinfo_en.'):
-            # Parse English songinfo attributes (store as backup or for display)
-            info_attr = attr_name.split('.')[1] if '.' in attr_name else ''
-            if info_attr == 'music':
-                data.setdefault('music_en', attr_value.strip('"'))
-            elif info_attr == 'lyrics':
-                data.setdefault('lyrics_en', attr_value.strip('"'))
-            elif info_attr == 'illustrator':
-                data.setdefault('illustrator_en', attr_value.strip('"'))
-            elif info_attr == 'manipulator':
-                data.setdefault('manipulator_en', attr_value.strip('"'))
-
-        elif attr_name == 'sort_index':
-            data['sort_id'] = int(attr_value) if attr_value.isdigit() else data['id']
-            return
-
-        # Parse new-style difficulty attributes with index: difficulty.{type}.{index}.{attr}
-        diff_match = self.DIFF_ATTR_PATTERN.match(attr_name)
-        if diff_match:
-            diff_type_name = diff_match.group(1).lower()
-            diff_index = int(diff_match.group(2))
-            diff_attr = diff_match.group(3)
-
-            diff_type = song_model.parse_difficulty_type(diff_type_name)
-            if diff_type:
-                self._update_difficulty_detail(data, diff_type, diff_attr, attr_value, diff_index)
-            return
-
-    def _update_difficulty_detail(self, data: Dict, diff_type: DifficultyType,
-                                   attr: str, value: str, index: int = 0) -> None:
-        """Update difficulty detail information."""
-        if 'difficulty_details' not in data:
-            data['difficulty_details'] = {}
-
-        # Create a unique key for each difficulty instance (type + index)
-        diff_key = (diff_type, index)
-
-        if diff_key not in data['difficulty_details']:
-            # Determine actual difficulty type
-            # If index > 0 and type is EXTREME, it could be EXTRA EXTREME
-            actual_type = diff_type
-            is_extra = False
-
-            # Check if this is an indexed EXTREME difficulty (potential EXTRA EXTREME)
-            if diff_type == DifficultyType.EXTREME and index > 0:
-                is_extra = True
-                actual_type = DifficultyType.EXTRA_EXTREME
-
-            data['difficulty_details'][diff_key] = ChartInfo(
-                style=ChartStyle.ARCADE,
-                type=actual_type,
-                index=index,
-                is_extra=is_extra
-            )
-
-        detail: ChartInfo = data['difficulty_details'][diff_key]
-
-        # Record mod_id if available
-        if data.get('mod_info') and data['mod_info'].id is not None:
-            detail.mod_ids.add(data['mod_info'].id)
-            detail.mod_id = data['mod_info'].id
-
-        if attr == 'edition':
-            detail.edition = int(value) if value.isdigit() else 0
-
-        elif attr == 'level':
-            detail.level = self._parse_level(value)
-            # Don't add to difficulties list here - wait for script_file_name
-            # Difficulties without script files will be filtered out later
-
-        elif attr == 'script_file_name':
-            detail.script_file_name = value.strip('"')
-
-        elif attr == 'attribute':
-            # Attribute alone doesn't add difficulty - need script file
-            pass
-
-        elif attr.startswith('attribute.'):
-            # Handle nested attribute properties like attribute.extra
-            attr_prop = attr.split('.')[1] if '.' in attr else attr.split('_')[-1]
-            if attr_prop == 'extra' and value.strip() == '1':
-                detail.is_extra = True
-                # Promote EXTREME with extra=1 to EXTRA_EXTREME
-                if detail.type == DifficultyType.EXTREME:
-                    detail.type = DifficultyType.EXTRA_EXTREME
-            elif attr_prop == 'original':
-                detail.is_original = value.strip() == '1'
-            elif attr_prop == 'slide':
-                detail.is_slide = value.strip() == '1'
-
-        # Only add to difficulties list when script file is present
-        if detail.script_file_name and detail.type not in data.get('difficulties', []):
-            if 'difficulties' not in data:
-                data['difficulties'] = []
-            data['difficulties'].append(detail.type)
-
-    def _merge_song_data(self, existing: Song, new_data: Dict, is_vanilla: bool = False) -> None:
-        """Merge new data into an existing song.
-
-        Args:
-            existing: The existing song object to merge into
-            new_data: New song data from parsing
-            is_vanilla: Whether this data comes from a vanilla file
-        """
-        # Merge difficulty details (keys are now tuples: (diff_type, index))
-        # Only include difficulties with script files
-        for diff_key, detail in new_data.get('difficulty_details', {}).items():
-            # Skip difficulties without script files (also filter empty/whitespace-only paths)
-            if not detail.script_file_name or not detail.script_file_name.strip():
-                continue
-
-            # Append the new difficulty detail
-            existing.chart_infos.append(detail)
-
-        # Re-sort difficulty details by custom order after merge
-        existing.chart_infos.sort(
-            key=lambda d: self.DIFFICULTY_ORDER.index(d.type.value)
-            if d.type.value in self.DIFFICULTY_ORDER else d.type.value
-        )
-        # Rebuild difficulties list based on sorted details (all should have script_path)
-        existing.difficulties = [d.type for d in existing.chart_infos]
-
-        # Update hidden status
-        if new_data.get('hidden'):
-            existing.hidden = True
-            self._hidden_songs.add(existing.id)
-
-        # Merge Mod information - add new mod to list if not already present
-        new_mod_info = new_data.get('mod_info')
-        if new_mod_info:
-            # Add to mod_infos list if not already present
-            if new_mod_info not in existing.mod_infos:
-                existing.mod_infos.append(new_mod_info)
-            # Also update single mod_info for backward compatibility (use first enabled or first available)
-            if not existing.mod_info or (not existing.mod_info.enabled and new_mod_info.enabled):
-                existing.mod_info = new_mod_info
-
-        # Update vanilla status - if any source is vanilla, mark as vanilla
-        if new_data.get('is_vanilla'):
-            existing.is_vanilla = True
-
-        # Update mod_enabled: OR logic - if any mod is enabled, song is enabled
-        new_mod_enabled = new_data.get('mod_enabled', True)
-        existing.mod_enabled = existing.mod_enabled or new_mod_enabled
-
-        # Merge attributes
-        existing.attributes.update(new_data.get('attributes', {}))
-
-        # Update other fields if not already set
-        if not existing.name_en and new_data.get('name_en'):
-            existing.name_en = new_data['name_en']
-
-        if not existing.name_reading and new_data.get('name_reading'):
-            existing.name_reading = new_data['name_reading']
-
-        if not existing.arranger and new_data.get('arranger'):
-            existing.arranger = new_data['arranger']
 
     def search_songs(self, query: str, difficulty: Optional[int] = None) -> List[Song]:
         """Search songs by name or PV ID."""
