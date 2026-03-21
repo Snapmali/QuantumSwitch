@@ -1,7 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
-import { songApi, gameApi } from '@/api'
-import type { Song, SongListResponse, FilterOptions, DifficultyType } from '@/types'
+import { songApi, gameApi, modApi } from '@/api'
+import type { Song, SongListResponse, FilterOptions, DifficultyType, SongAliasMatchItem, ModInfoSearchItem } from '@/types'
 import { ElMessage } from 'element-plus'
 
 export const useSongStore = defineStore('songs', () => {
@@ -23,6 +23,14 @@ export const useSongStore = defineStore('songs', () => {
   // Filter state (for server-side filtering)
   const searchQuery = ref('')
   const favoritesOnly = ref(false)
+
+  // Search mode state
+  const searchMode = ref<'song' | 'mod'>('song')
+  const matchedMods = ref<ModInfoSearchItem[]>([])
+  const selectedModId = ref<number | null>(null)
+
+  // Matched aliases from search
+  const matchedAliases = ref<SongAliasMatchItem[]>([])
 
   // Favorites state - 当前列表页的歌曲收藏状态
   const favorites = ref<Set<number>>(new Set())
@@ -76,6 +84,8 @@ export const useSongStore = defineStore('songs', () => {
         pageSize: pageSize.value,
         search: query || undefined,
         favorites: favoritesOnly.value,
+        searchMode: searchMode.value,
+        modId: selectedModId.value ?? undefined,
       })
 
       const data: SongListResponse = response.data.data
@@ -83,6 +93,13 @@ export const useSongStore = defineStore('songs', () => {
       total.value = data.total || 0
       currentPage.value = data.page || page
       totalPages.value = data.totalPages || 1
+
+      // Update matched aliases (only for song mode)
+      if (searchMode.value === 'song') {
+        matchedAliases.value = data.matchedAliases || []
+      } else {
+        matchedAliases.value = []
+      }
 
       // Update favorites set from song data (merge, don't replace)
       data.songs?.forEach(song => {
@@ -147,6 +164,41 @@ export const useSongStore = defineStore('songs', () => {
     searchQuery.value = query
     currentPage.value = 1
     await loadSongs(1, query, true) // 搜索时清空 favorites
+  }
+
+  function setSearchMode(mode: 'song' | 'mod') {
+    searchMode.value = mode
+    // Clear mod selection when switching modes
+    if (mode === 'song') {
+      selectedModId.value = null
+    }
+    // Clear search query and reload
+    searchQuery.value = ''
+    matchedMods.value = []
+    matchedAliases.value = []
+    loadSongs(1, '', true)
+  }
+
+  async function searchMods(query: string) {
+    if (!query || query.length === 0) {
+      matchedMods.value = []
+      return
+    }
+    try {
+      const response = await modApi.search(query, 10)
+      matchedMods.value = response.data.data || []
+    } catch (err) {
+      console.error('Failed to search mods:', err)
+      matchedMods.value = []
+    }
+  }
+
+  async function selectMod(modId: number, modName: string) {
+    selectedModId.value = modId
+    searchQuery.value = modName
+    matchedMods.value = []
+    currentPage.value = 1
+    await loadSongs(1, modName, true)
   }
 
   function setDifficultyFilter(difficulties: DifficultyType[]) {
@@ -272,6 +324,11 @@ export const useSongStore = defineStore('songs', () => {
     filterOptions,
     favorites,
     favoritesOnly,
+    matchedAliases,
+    // Search mode state
+    searchMode,
+    matchedMods,
+    selectedModId,
     // Getters
     allSongs,
     hasSongs,
@@ -284,6 +341,9 @@ export const useSongStore = defineStore('songs', () => {
     changePage,
     changePageSize,
     searchSongs,
+    setSearchMode,
+    searchMods,
+    selectMod,
     setDifficultyFilter,
     setHiddenOnly,
     setSortBy,

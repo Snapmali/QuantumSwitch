@@ -4,10 +4,8 @@ import traceback
 from fastapi import APIRouter, HTTPException
 
 from ..core.bootstrap import (
-    get_process_manager,
-    get_memory_operator,
     get_song_selector,
-    get_pvdb_parser,
+    get_pvdb_parser, get_game_status_processor,
 )
 from ..models import (
     GameStatusResponse,
@@ -60,26 +58,24 @@ def _build_current_song_info(song: Song, style: ChartStyle) -> CurrentSongInfo:
 
 def get_game_status_internal() -> GameStatusResponse:
     """Get current game status."""
-    pm = get_process_manager()
-    mem = get_memory_operator()
-    selector = get_song_selector()  # Ensure selector is initialized
+    gsp = get_game_status_processor()
 
     # Check if game is running, and try to attach to the game process.
-    is_running = pm.attach()
+    pid = gsp.attach_for_pid()
 
-    if not is_running:
+    if pid is None:
         return GameStatusResponse(running=False)
 
     # Get game state
-    game_state = mem.get_game_state()
+    game_state = gsp.get_game_state()
 
     # Get current selection from memory
-    pvid, is_ingame, style = selector.get_current_selection()
+    pvid, is_ingame, style = gsp.get_current_selection()
 
-    # 将 ChartStyle 转换为字符串
+    # Cast ChartStyle to string
     current_style = style.value if style else None
 
-    # Get current song info from selector
+    # Get current song info
     current_song_info = None
     if pvid is not None:
         parser = get_pvdb_parser()
@@ -88,12 +84,10 @@ def get_game_status_internal() -> GameStatusResponse:
             current_song_info = _build_current_song_info(song, style)
 
     return GameStatusResponse(
-        running=is_running,
-        processId=pm.process_id,
+        running=True,
+        processId=pid,
         currentSongId=pvid,
-        gameState=game_state,
-        edenVersion=mem.is_eden_version,
-        edenOffset=mem.eden_offset,
+        gameState=game_state.name if game_state is not None else None,
         currentSongInfo=current_song_info,
         currentChartStyle=current_style,
         isIngame=is_ingame if is_ingame is not None else False,
@@ -173,11 +167,11 @@ async def switch_song(request: SwitchSongRequest):
 async def get_current_song():
     """Get currently selected song in game."""
     try:
-        selector = get_song_selector()
         parser = get_pvdb_parser()
+        gsp = get_game_status_processor()
 
         # Get current selection from selector (reads from game memory)
-        pvid, is_ingame, style = selector.get_current_selection()
+        pvid, is_ingame, style = gsp.get_current_selection()
 
         if pvid is None:
             return ApiResponse(success=True, data=CurrentSongInfo(id=0, name=""))

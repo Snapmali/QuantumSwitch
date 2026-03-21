@@ -8,20 +8,13 @@ Core Logic Acknowledgment:
     https://gamebanana.com/tools/18296
     https://github.com/sasnchis/DivaSongViewer/tree/master
 
-    Specifically, the following aspects are derived from these projects:
-    - Memory address layout and offsets for song selection
-    - The game state detection mechanism using CHANGE_SONG_SELECT
-    - The standard switch procedure and delayed switch procedure
-    - The sequence of writing PVID, difficulty type, sort, and difficulty level
-
     Huge thanks to 萌新安定, hiki8man and sasnchis for reverse engineering and documenting these techniques.
 """
 import time
 from enum import Enum
 from typing import Optional, Tuple
 
-from app.models import ChartStyle
-from app.models.song import Song, DifficultyType
+from app.models import ChartStyle, DifficultyType, Song, ChartStyleValue, GameState
 from app.utils.logger import logger
 from app.config import settings, DllEnum, DllPatternOffset
 
@@ -31,53 +24,21 @@ class SwitchMode(Enum):
     STANDARD = "standard"  # Normal switch when in song selection (state 6)
     DELAYED = "delayed"    # Delayed switch when in PV selection (state 5)
 
-
-class ChartStyleMapping:
-    """双向 ChartStyle 映射，支持 style -> 内存值 和 内存值 -> style 的转换"""
-
-    _STYLE_TO_VALUE = {
-        ChartStyle.ARCADE: 0,
-        ChartStyle.CONSOLE: 1,
-        ChartStyle.MIXED: 2,
-    }
-
-    _VALUE_TO_STYLE = {v: k for k, v in _STYLE_TO_VALUE.items()}
-
-    @classmethod
-    def to_value(cls, style: ChartStyle) -> int:
-        """ChartStyle -> 内存值 (默认返回 0)"""
-        return cls._STYLE_TO_VALUE.get(style, 0)
-
-    @classmethod
-    def from_value(cls, value: int) -> ChartStyle:
-        """内存值 -> ChartStyle (默认返回 ARCADE)"""
-        return cls._VALUE_TO_STYLE.get(value, ChartStyle.ARCADE)
-
-
 class SongSelector:
     """Handles song selection and switching in the game."""
 
     # Game states
-    STATE_PV_SELECTION = 5
-    STATE_SONG_SELECTION = 6
-
     STATE_INGAME = 0
-    PVID_EMPTY_INGAME = 0xFFFFFFFF
-    PVID_EMPTY_SONG_SELECTION = 0xFFFFFFFE
 
     def __init__(self, memory_operator):
         self._mem = memory_operator
-
-    def get_game_state(self) -> Optional[int]:
-        """Get the current game state."""
-        return self._mem.get_game_state()
 
     def determine_switch_mode(self) -> Optional[SwitchMode]:
         """
         Determine which switch mode to use based on game state.
 
         According to technical specification (Section 5.2, step 3):
-        - Read CHANGE_SONG_SELECT (0xCC61098)
+        - Read GAME_STATE_NEXT (0xCC61098)
         - If value == 6: use STANDARD mode (song selection, ready state)
         - If value != 6: use DELAYED mode (PV selection or other states)
 
@@ -87,26 +48,26 @@ class SongSelector:
         - other: Game handling other operations
 
         Returns:
-            SwitchMode.STANDARD if CHANGE_SONG_SELECT == 6
-            SwitchMode.DELAYED if CHANGE_SONG_SELECT != 6 (including state 5)
+            SwitchMode.STANDARD if GAME_STATE_NEXT == 6
+            SwitchMode.DELAYED if GAME_STATE_NEXT != 6 (including state 5)
             None if game not running or cannot read memory
         """
         from app.config import settings
 
-        # Read CHANGE_SONG_SELECT value (0xCC61098)
+        # Read GAME_STATE_NEXT value (0xCC61098)
         # Per spec: Control addresses are NOT affected by Eden offset
-        change_song_select = self._mem.read_int(settings.CHANGE_SONG_SELECT_ADDR)
-        if change_song_select is None:
-            logger.warning("Failed to read CHANGE_SONG_SELECT, game may not be running")
+        game_state_next = self._mem.read_int(settings.GAME_STATE_NEXT_ADDR)
+        if game_state_next is None:
+            logger.warning("Failed to read GAME_STATE_NEXT, game may not be running")
             return None
 
-        logger.info(f"Read CHANGE_SONG_SELECT = {change_song_select} (0x{change_song_select:08X})")
+        logger.info(f"Read GAME_STATE_NEXT = {game_state_next} (0x{game_state_next:08X})")
 
         # According to technical specification Section 5.2:
-        # - Step 3: Read CHANGE_SONG_SELECT
+        # - Step 3: Read GAME_STATE_NEXT
         # - If value == 6: Standard mode (song selection state)
         # - If value != 6: Delayed mode (PV selection or other states)
-        if change_song_select == self.STATE_SONG_SELECTION:
+        if game_state_next == GameState.CUSTOM_PLAYLIST:
             return SwitchMode.STANDARD
         else:
             # Any value other than 6 (including 5 or other states) uses DELAYED mode
@@ -150,7 +111,7 @@ class SongSelector:
         if success:
             message = f"Successfully switched to '{song.name}' ({actual_difficulty.display_name})"
             if mode == SwitchMode.DELAYED:
-                message += " (delayed update - enter song selection ment to apply)"
+                message += " (delayed update)"
         else:
             message = "Failed to switch song"
 
@@ -161,18 +122,18 @@ class SongSelector:
         Execute standard song switch (when in song selection state).
 
         According to technical specification (Section 5.2):
-        - Step 4: Initialize switch (CHANGE_SONG_SELECT = 6, START_CHANGE = 2)
+        - Step 4: Initialize switch (GAME_STATE_NEXT = 6, START_CHANGE = 2)
         - Step 5: Wait 100ms
         - Step 6: Prepare data (write DIFF_TYPE, PVID)
         - Step 7: Set sort (write SORT = 1, DIFF_LEVEL = 19)
-        - Step 8: Trigger switch (CHANGE_SONG_SELECT = 5, START_CHANGE = 2)
+        - Step 8: Trigger switch (GAME_STATE_NEXT = 5, START_CHANGE = 2)
         """
         try:
             # Step 4: Initialize switch
             logger.debug("Step 4: Initialize switch")
-            # Write CHANGE_SONG_SELECT = 6 (switch to Custom playlists)
-            if not self._mem.write_int(settings.CHANGE_SONG_SELECT_ADDR, 6):
-                logger.error("Failed to set CHANGE_SONG_SELECT = 6")
+            # Write GAME_STATE_NEXT = 6 (switch to Custom playlists)
+            if not self._mem.write_int(settings.GAME_STATE_NEXT_ADDR, 6):
+                logger.error("Failed to set GAME_STATE_NEXT = 6")
                 return False
 
             # Write START_CHANGE = 2 (triggering menu switch)
@@ -201,7 +162,7 @@ class SongSelector:
                 style_offset = self._mem.read_int(0, dll_pattern_offset=DllPatternOffset.CHART_STYLE_OFFSET)
                 if not self._mem.write_int(
                         style_offset + 4,
-                        ChartStyleMapping.to_value(style),
+                        ChartStyleValue.to_value(style),
                         dll_pattern_offset=DllPatternOffset.CHART_STYLE_OFFSET
                 ):
                     logger.error("Failed to write CHART_STYLE")
@@ -221,9 +182,9 @@ class SongSelector:
 
             # Step 8: Trigger switch
             logger.debug("Step 8: Trigger switch")
-            # Write CHANGE_SONG_SELECT = 5 (switch to Rhythm Game)
-            if not self._mem.write_int(settings.CHANGE_SONG_SELECT_ADDR, 5):
-                logger.error("Failed to set CHANGE_SONG_SELECT = 5")
+            # Write GAME_STATE_NEXT = 5 (switch to Rhythm Game)
+            if not self._mem.write_int(settings.GAME_STATE_NEXT_ADDR, 5):
+                logger.error("Failed to set GAME_STATE_NEXT = 5")
                 return False
 
             # Write START_CHANGE = 2 (triggering menu switch)
@@ -271,7 +232,7 @@ class SongSelector:
                 style_offset = self._mem.read_int(0, dll_pattern_offset=DllPatternOffset.CHART_STYLE_OFFSET)
                 if not self._mem.write_int(
                         style_offset + 4,
-                        ChartStyleMapping.to_value(style),
+                        ChartStyleValue.to_value(style),
                         dll_pattern_offset=DllPatternOffset.CHART_STYLE_OFFSET
                 ):
                     logger.error("Failed to write CHART_STYLE")
@@ -287,7 +248,7 @@ class SongSelector:
                 logger.error("Delayed mode: Failed to write DIFF_LEVEL")
                 return False
 
-            # Note: We don't trigger CHANGE_SONG_SELECT or START_CHANGE here
+            # Note: We don't trigger GAME_STATE_NEXT or START_CHANGE here
             # The change will be applied when user presses ENTER to enter song selection
 
             logger.info(
@@ -299,71 +260,3 @@ class SongSelector:
         except Exception as e:
             logger.exception(f"Error during delayed switch: {e}")
             return False
-
-    def get_current_selection(self) -> Tuple[Optional[int], Optional[bool], Optional[ChartStyle]]:
-        """
-        Get the currently playing or selected song PVID.
-
-        Reads the game state to determine if player is in-game or in song selection,
-        then reads the appropriate memory address to get the current PVID.
-
-        Returns:
-            Tuple of (current_pvid, is_ingame):
-                - current_pvid: The current song PVID, or None if no song selected
-                - is_ingame: True if player is in-game (playing), False if in menu,
-                           None if cannot read memory
-                - style: The current chart style
-        """
-        # Read game state to determine if player is in-game
-        curr_pvid_base_addr = self._mem.read_int(settings.CURR_PVID_BASE_PTR_ADDR, size=8)
-        if curr_pvid_base_addr is None:
-            logger.warning("Failed to read CURR_PVID_BASE_PTR_ADDR, game may not be running")
-            return None, None, None
-        logger.debug(f"Read CURR_PVID_BASE_PTR_ADDR 0x{settings.CURR_PVID_BASE_PTR_ADDR:08X} = "
-                    f"0x{curr_pvid_base_addr:08X} ({curr_pvid_base_addr})")
-
-        # Determine which memory address to read based on game state
-        # STATE_INGAME (0): Player is currently playing a song
-        # Other values: Player is in menu/song selection
-        if curr_pvid_base_addr == self.STATE_INGAME:
-            current_pvid_addr = settings.CURR_PVID_INGAME_ADDR
-            is_ingame = True
-            use_offset = True
-        else:
-            curr_pvid_song_selection_offset = (self._mem.read_int(settings.CURR_PVID_SONG_SELECTION_OFFSET_PTR_ADDR)
-                                               - settings.CURR_PVID_SONG_SELECTION_OFFSET_PTR_OFFSET)
-            if curr_pvid_song_selection_offset is None:
-                logger.warning("Failed to read CURR_PVID_SONG_SELECTION_OFFSET, game may not be running")
-                return None, None, None
-
-            current_pvid_addr = curr_pvid_base_addr + curr_pvid_song_selection_offset
-            is_ingame = False
-            use_offset = False
-            logger.debug(f"CURR_PVID_ADDR: 0x{current_pvid_addr:08X} = 0x{curr_pvid_base_addr:08X} + 0x{curr_pvid_song_selection_offset:08X}")
-
-        # Read the current PVID from the determined address
-        current_pvid = self._mem.read_int(current_pvid_addr, use_offset=use_offset)
-        if current_pvid is None:
-            logger.warning(f"Failed to read CURR_PVID_BASE_ADDR 0x{curr_pvid_base_addr:08X}, "
-                           f"game may not be running or not in the right state")
-            return None, None, None
-
-        # Check if no song is selected (empty PVID values)
-        elif current_pvid == self.PVID_EMPTY_INGAME or current_pvid == self.PVID_EMPTY_SONG_SELECTION:
-            logger.info(f"CURR_PVID_ADDR checked: 0x{current_pvid_addr:08X}, PVID: {current_pvid}, no song selected")
-            return None, None, None
-        else:
-            logger.info(f"CURR_PVID_ADDR checked: 0x{current_pvid_addr:08X}, PVID: {current_pvid}, Ingame state: {is_ingame}")
-
-        if self._mem.get_cached_dll_base(DllEnum.NEW_CLASSICS):
-            style_offset = self._mem.read_int(0, dll_pattern_offset=DllPatternOffset.CHART_STYLE_OFFSET)
-            style_value = self._mem.read_int(style_offset + 4, dll_pattern_offset=DllPatternOffset.CHART_STYLE_OFFSET)
-            style = ChartStyleMapping.from_value(style_value)
-        else:
-            style = ChartStyle.ARCADE
-
-        return current_pvid, is_ingame, style
-
-    def get_last_selection(self) -> Tuple[Optional[int], Optional[int], Optional[int]]:
-        """Get the currently selected song information."""
-        return self._mem.get_last_selection()

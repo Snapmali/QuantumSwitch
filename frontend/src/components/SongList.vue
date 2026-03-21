@@ -1,9 +1,14 @@
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue'
-import type { Song } from '@/types'
+import { useI18n } from 'vue-i18n'
+import type { Song, SongAliasMatchItem, ModInfoSearchItem } from '@/types'
 import { Search, Refresh, Star, StarFilled } from '@element-plus/icons-vue'
 import { debounce } from 'lodash-es'
 import { getDifficultyStyle } from '@/types'
+import SearchAliasDropdown from './SearchAliasDropdown.vue'
+import SearchModDropdown from './SearchModDropdown.vue'
+
+const { t } = useI18n()
 
 const props = defineProps<{
   songs: Song[]
@@ -14,6 +19,10 @@ const props = defineProps<{
   pageSize?: number
   favorites?: Set<number>
   favoritesOnly?: boolean
+  matchedAliases?: SongAliasMatchItem[]
+  // New props for mod search
+  searchMode?: 'song' | 'mod'
+  matchedMods?: ModInfoSearchItem[]
 }>()
 
 const emit = defineEmits<{
@@ -23,10 +32,13 @@ const emit = defineEmits<{
   search: [query: string]
   toggleFavorite: [songId: number]
   'update:favoritesOnly': [value: boolean]
+  'update:searchMode': [value: 'song' | 'mod']
+  selectAlias: [item: SongAliasMatchItem]
+  selectMod: [item: ModInfoSearchItem]
+  searchMods: [query: string]
 }>()
 
 const searchQuery = ref('')
-const selectedDifficulties = ref<string[]>([])
 const currentPage = computed({
   get: () => props.page || 1,
   set: (val) => {
@@ -38,6 +50,16 @@ const currentPage = computed({
 const favoritesOnlyLocal = computed({
   get: () => props.favoritesOnly || false,
   set: (val) => emit('update:favoritesOnly', val)
+})
+
+const searchModeLocal = computed({
+  get: () => props.searchMode || 'song',
+  set: (val) => {
+    emit('update:searchMode', val)
+    // Clear search query when switching modes
+    searchQuery.value = ''
+    emit('search', '')
+  }
 })
 
 // ChartStyle filter state - default to ARCADE
@@ -62,37 +84,31 @@ const debouncedSearch = debounce((query: string) => {
   emit('search', query)
 }, 300)
 
+// Debounced mod search function
+const debouncedModSearch = debounce((query: string) => {
+  emit('searchMods', query)
+}, 300)
+
 // Watch search query and emit debounced search
 watch(searchQuery, (newValue) => {
-  debouncedSearch(newValue)
+  // Skip search if selecting from dropdown (mod selection)
+  if (isSelectingFromDropdown.value) {
+    isSelectingFromDropdown.value = false
+    return
+  }
+  if (searchModeLocal.value === 'mod') {
+    debouncedModSearch(newValue)
+  } else {
+    debouncedSearch(newValue)
+  }
+  // Reset dropdown visibility when search content changes
+  if (isDropdownHiddenByEsc.value) {
+    isDropdownHiddenByEsc.value = false
+  }
 })
 
-const difficultyOptions = [
-  { label: 'EASY', value: 'EASY', type: 'primary' },
-  { label: 'NORMAL', value: 'NORMAL', type: 'success' },
-  { label: 'HARD', value: 'HARD', type: 'warning' },
-  { label: 'EXTREME', value: 'EXTREME', type: 'danger' },
-  { label: 'EX EXTREME', value: 'EXTRA EXTREME', type: 'danger' },
-]
-
 const filteredSongs = computed(() => {
-  let result = props.songs
-
-  // Note: Search is now handled server-side via the search event
-  // Only difficulty filtering is done client-side
-
-  // Filter by difficulty - check across all styles for the difficulty type
-  if (selectedDifficulties.value.length > 0) {
-    result = result.filter(song =>
-      song.difficultyDetails?.some(style =>
-        style.difficulties?.some(diff =>
-          selectedDifficulties.value.includes(diff.name) && diff.hasEnabledCharts
-        )
-      )
-    )
-  }
-
-  return result
+  return props.songs
 })
 
 const handleSelect = (song: Song) => {
@@ -112,9 +128,85 @@ const isFavorite = (songId: number) => {
   return props.favorites?.has(songId) || false
 }
 
+// Alias/Mod dropdown state and handlers
+const isSearchFocused = ref(false)
+const aliasDropdownRef = ref<InstanceType<typeof SearchAliasDropdown> | null>(null)
+const modDropdownRef = ref<InstanceType<typeof SearchModDropdown> | null>(null)
+const dropdownSelectedIndex = ref(-1)
+const isDropdownHiddenByEsc = ref(false)
+// Flag to prevent search when selecting from dropdown
+const isSelectingFromDropdown = ref(false)
+
+const showDropdown = computed(() => {
+  if (isDropdownHiddenByEsc.value || !isSearchFocused.value || searchQuery.value.length === 0) {
+    return false
+  }
+  if (searchModeLocal.value === 'mod') {
+    return (props.matchedMods?.length ?? 0) > 0
+  }
+  return (props.matchedAliases?.length ?? 0) > 0
+})
+
+const handleSearchKeydown = (event: KeyboardEvent) => {
+  if (!showDropdown.value) return
+
+  const matches = searchModeLocal.value === 'mod' ? props.matchedMods : props.matchedAliases
+  const maxIndex = (matches?.length ?? 0) - 1
+  if (maxIndex < 0) return
+
+  switch (event.key) {
+    case 'ArrowDown':
+      event.preventDefault()
+      dropdownSelectedIndex.value = Math.min(dropdownSelectedIndex.value + 1, maxIndex)
+      break
+    case 'ArrowUp':
+      event.preventDefault()
+      dropdownSelectedIndex.value = Math.max(dropdownSelectedIndex.value - 1, -1)
+      break
+    case 'Enter':
+      if (dropdownSelectedIndex.value >= 0 && matches?.[dropdownSelectedIndex.value]) {
+        event.preventDefault()
+        if (searchModeLocal.value === 'mod') {
+          handleModSelect(matches[dropdownSelectedIndex.value] as ModInfoSearchItem)
+        } else {
+          handleAliasSelect(matches[dropdownSelectedIndex.value] as SongAliasMatchItem)
+        }
+      }
+      break
+    case 'Escape':
+      isDropdownHiddenByEsc.value = true
+      break
+  }
+}
+
+const handleSearchBlur = (event: FocusEvent) => {
+  // Check if focus is moving to the dropdown
+  const relatedTarget = event.relatedTarget as HTMLElement
+  const aliasDropdownEl = aliasDropdownRef.value?.$el as HTMLElement | undefined
+  const modDropdownEl = modDropdownRef.value?.$el as HTMLElement | undefined
+  if (aliasDropdownEl?.contains(relatedTarget) || modDropdownEl?.contains(relatedTarget)) {
+    return
+  }
+  isSearchFocused.value = false
+}
+
+const handleAliasSelect = (item: SongAliasMatchItem) => {
+  // Fill search box with song name and trigger search
+  searchQuery.value = item.songName
+  emit('search', item.songName)
+  emit('selectAlias', item)
+}
+
+const handleModSelect = (item: ModInfoSearchItem) => {
+  // Set flag to prevent re-triggering search when setting searchQuery
+  isSelectingFromDropdown.value = true
+  // Fill search box with mod name and trigger mod selection
+  searchQuery.value = item.name
+  emit('selectMod', item)
+}
+
 // Format level for display (handle decimals like 6.5)
 const formatLevel = (level: number): string => {
-  if (level === 0) return ''
   // Show as integer if it's a whole number, otherwise show decimal
   return Number.isInteger(level) ? level.toString() : level.toFixed(1)
 }
@@ -142,7 +234,7 @@ const getChartStyleDifficulties = (
         maxLevel
       }
     })
-    .filter(d => d.maxLevel > 0)
+    .filter(d => d.maxLevel >= 0)
     .sort((a, b) => a.type - b.type)  // 按难度类型排序（EASY -> EXTRA_EXTREME）
 }
 </script>
@@ -151,45 +243,60 @@ const getChartStyleDifficulties = (
   <div class="song-list-container">
     <!-- Search and Filter -->
     <div class="search-section">
-      <el-input
-        v-model="searchQuery"
-        placeholder="搜索歌曲..."
-        clearable
-        :prefix-icon="Search"
-        class="search-input"
-      />
-      <el-select
-        v-model="selectedDifficulties"
-        multiple
-        collapse-tags
-        placeholder="筛选难度"
-        class="difficulty-filter"
-      >
-        <el-option
-          v-for="opt in difficultyOptions"
-          :key="opt.value"
-          :label="opt.label"
-          :value="opt.value"
+      <!-- Search Mode Radio Buttons -->
+      <div class="search-mode-row">
+        <el-radio-group v-model="searchModeLocal" size="small">
+          <el-radio-button value="song">{{ t('songList.searchBySong') }}</el-radio-button>
+          <el-radio-button value="mod">{{ t('songList.searchByMod') }}</el-radio-button>
+        </el-radio-group>
+      </div>
+      <!-- Search Input Row -->
+      <div class="search-input-row">
+        <div class="search-input-wrapper">
+          <el-input
+            v-model.trim="searchQuery"
+            :placeholder="searchModeLocal === 'mod' ? t('songList.searchModPlaceholder') : t('songList.searchPlaceholder')"
+            clearable
+            :prefix-icon="Search"
+            class="search-input"
+            @focus="isSearchFocused = true; dropdownSelectedIndex = -1; isDropdownHiddenByEsc = false"
+            @blur="handleSearchBlur"
+            @keydown="handleSearchKeydown"
+          />
+          <SearchAliasDropdown
+            ref="aliasDropdownRef"
+            :matches="matchedAliases || []"
+            :visible="showDropdown && searchModeLocal === 'song'"
+            :selected-index="dropdownSelectedIndex"
+            @select="handleAliasSelect"
+          />
+          <SearchModDropdown
+            ref="modDropdownRef"
+            :matches="matchedMods || []"
+            :visible="showDropdown && searchModeLocal === 'mod'"
+            :selected-index="dropdownSelectedIndex"
+            @select="handleModSelect"
+          />
+        </div>
+        <el-button
+          :icon="Refresh"
+          circle
+          :title="t('songList.refreshTooltip')"
+          @click="handleRefresh"
         />
-      </el-select>
-      <el-button
-        :icon="Refresh"
-        circle
-        title="刷新歌曲列表"
-        @click="handleRefresh"
-      />
+      </div>
     </div>
 
     <!-- Filters Row -->
     <div class="filters-row">
       <el-radio-group v-model="favoritesOnlyLocal" size="small">
         <el-radio-button :value="false">
-          <div class="filter-btn-content">全部歌曲</div>
+          <div class="filter-btn-content">{{ t('songList.allSongs') }}</div>
         </el-radio-button>
         <el-radio-button :value="true">
           <div class="filter-btn-content">
             <el-icon><StarFilled /></el-icon>
-            <span>已收藏</span>
+            <span>{{ t('songList.favorites') }}</span>
           </div>
         </el-radio-button>
       </el-radio-group>
@@ -205,7 +312,7 @@ const getChartStyleDifficulties = (
     <!-- Song List -->
     <div v-loading="loading" class="songs-container">
       <div v-if="filteredSongs.length === 0" class="empty-state">
-        <el-empty description="未找到歌曲" />
+        <el-empty :description="t('songList.noSongsFound')" />
       </div>
       <div
         v-for="song in filteredSongs"
@@ -217,14 +324,14 @@ const getChartStyleDifficulties = (
           <div class="song-info">
             <div class="song-name-row">
               <span class="song-name">{{ song.name }}</span>
-              <span v-if="song.hidden" class="static-tag hidden-tag">隐藏</span>
+              <span v-if="song.hidden" class="static-tag hidden-tag">{{ t('songList.hidden') }}</span>
             </div>
             <div v-if="song.nameEn && song.nameEn !== song.name" class="song-name-en">{{ song.nameEn }}</div>
           </div>
           <div class="song-meta">
             <div class="song-id">id {{ song.id }}</div>
-            <span v-if="song.isVanilla" class="static-tag vanilla-tag">原版</span>
-            <span v-else-if="song.modEnabled === false" class="static-tag disabled-tag">已禁用</span>
+            <span v-if="song.isVanilla" class="static-tag vanilla-tag">{{ t('songList.vanilla') }}</span>
+            <span v-else-if="song.modEnabled === false" class="static-tag disabled-tag">{{ t('songList.disabled') }}</span>
           </div>
         </div>
         <div class="song-difficulties">
@@ -232,7 +339,7 @@ const getChartStyleDifficulties = (
           <el-tooltip
             v-for="diff in getChartStyleDifficulties(song, selectedChartStyle)"
             :key="diff.type"
-            :content="`${diff.name}${diff.maxLevel > 0 ? ' - ' + formatLevel(diff.maxLevel) + '★' : ''}`"
+            :content="`${diff.name}${diff.maxLevel >= 0 ? ' - ' + formatLevel(diff.maxLevel) + '★' : ''}`"
             placement="top"
           >
             <span
@@ -240,7 +347,7 @@ const getChartStyleDifficulties = (
               :style="getDifficultyStyle(diff.name)"
             >
               <span class="diff-short">{{ diff.shortName }}</span>
-              <span v-if="diff.maxLevel > 0" class="diff-level">
+              <span v-if="diff.maxLevel >= 0" class="diff-level">
                 {{ formatLevel(diff.maxLevel) }}
               </span>
             </span>
@@ -275,7 +382,7 @@ const getChartStyleDifficulties = (
     </div>
 
     <div class="song-count">
-      共 {{ total || 0 }} 首歌曲
+      {{ t('songList.totalSongs', { count: total || 0 }) }}
     </div>
   </div>
 </template>
@@ -291,18 +398,29 @@ const getChartStyleDifficulties = (
   padding: 16px;
   border-bottom: 1px solid var(--el-border-color-light);
   display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.search-mode-row {
+  margin-bottom: 0;
+}
+
+.search-input-row {
+  display: flex;
   gap: 12px;
-  flex-wrap: wrap;
+  align-items: flex-start;
+}
+
+.search-input-wrapper {
+  position: relative;
+  flex: 1;
+  min-width: 150px;
 }
 
 .search-input {
   flex: 1;
   min-width: 150px;
-}
-
-.difficulty-filter {
-  width: 150px;
-  min-width: 120px;
 }
 
 .filters-row {
@@ -566,11 +684,6 @@ const getChartStyleDifficulties = (
     order: 1;
   }
 
-  .difficulty-filter {
-    width: calc(100% - 52px);
-    order: 2;
-  }
-
   .search-section .el-button {
     order: 3;
   }
@@ -641,15 +754,6 @@ const getChartStyleDifficulties = (
 
   .search-input :deep(.el-input__inner) {
     font-size: 16px;
-  }
-
-  .difficulty-filter {
-    width: calc(100% - 44px);
-    min-width: auto;
-  }
-
-  .difficulty-filter :deep(.el-input__inner) {
-    font-size: 14px;
   }
 
   .search-section .el-button {

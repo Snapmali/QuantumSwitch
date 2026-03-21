@@ -1,17 +1,16 @@
 """PVDB file parser for extracting song information."""
 import re
-
-import toml
 from collections import defaultdict
 from dataclasses import dataclass, field
-
-import app.models.song as song_model
 from pathlib import Path
 from typing import List, Optional, Dict, Set, Tuple
-from app.models import Song, DifficultyType, ChartInfo, ChartStyle, NcSong, NcChartInfo
-from app.models.mod_info import ModInfo
-from app.utils.logger import logger
+
+import toml
+
 from app.config import DATA_DIR, IS_FROZEN
+from app.models import Song, DifficultyType, ChartInfo, ChartStyle, ModInfo, NcSong, NcChartInfo
+from app.models.difficulty_type import nc_diff_type_mapping, parse_difficulty_type
+from app.utils.logger import logger
 
 
 @dataclass
@@ -424,12 +423,7 @@ class PvdbParser:
                     if not rom_path.exists():
                         continue
 
-                    pvdb_files, ncdb_file = self._find_db_files(rom_path)
-
-                    # nc_db found
-                    if ncdb_file:
-                        mod_ncdb_file = ncdb_file
-                        logger.info(f"nc_db.toml found at {ncdb_file}, parsing TODO")
+                    pvdb_files, mod_ncdb_file = self._find_db_files(rom_path)
 
                     mod_pvdb_files.extend(pvdb_files)
 
@@ -701,7 +695,7 @@ class PvdbParser:
         diff_index = int(diff_match.group(2))
         diff_attr = diff_match.group(3)
 
-        diff_type = song_model.parse_difficulty_type(diff_type_name)
+        diff_type = parse_difficulty_type(diff_type_name)
         if diff_type:
             self._update_builder_difficulty(builder, diff_type, diff_attr, attr_value, diff_index)
 
@@ -784,7 +778,7 @@ class PvdbParser:
             difficulties: List[NcChartInfo] = []
 
             # Difficulty mapping from TOML keys to internal names
-            for diff_key, diff_type in song_model.nc_diff_type_mapping.items():
+            for diff_key, diff_type in nc_diff_type_mapping.items():
                 diff_entries = song_data.get(diff_key, [])
                 if not isinstance(diff_entries, list):
                     continue
@@ -801,7 +795,7 @@ class PvdbParser:
                         style = ChartStyle.ARCADE  # Default to ARCADE if invalid
 
                     level_raw = entry.get('level')
-                    level = self._parse_level(level_raw) if level_raw else None
+                    level = self._parse_level(level_raw) if level_raw else 0.0
 
                     script_file = entry.get('script_file_name')
 

@@ -1,8 +1,11 @@
 <script setup lang="ts">
 import type { Song } from '@/types'
 import { ref, computed } from 'vue'
+import { useI18n } from 'vue-i18n'
 import {Check, Folder, InfoFilled, StarFilled, Star, SwitchButton, UserFilled, VideoPlay, Collection, Warning} from "@element-plus/icons-vue"
 import { formatLevel, getDifficultyLabel, DifficultyColorValues } from '@/types'
+
+const { t } = useI18n()
 
 const props = defineProps<{
   song: Song | null
@@ -50,16 +53,16 @@ const switchButtonDisabled = computed(() => {
 })
 
 const switchButtonHint = computed(() => {
-  if (!props.selectedStyle || props.selectedDifficultyType === null) return '请先选择难度'
-  if (!props.gameRunning) return '游戏未运行'
+  if (!props.selectedStyle || props.selectedDifficultyType === null) return t('songDetail.selectChartFirst')
+  if (!props.gameRunning) return t('songDetail.gameNotRunning')
 
-  // 检查选中的难度是否被禁用
+  // Check if selected difficulty is disabled
   const diffDetail = findDifficultyDetail(props.song, props.selectedStyle, props.selectedDifficultyType)
-  if (!diffDetail?.hasEnabledCharts) return '该难度已被禁用'
+  if (!diffDetail?.hasEnabledCharts) return t('songDetail.modDisabled')
 
-  // 原版歌曲不显示mod禁用提示
+  // Vanilla songs don't check mod enabled status
   if (props.song?.isVanilla) return ''
-  if (props.isModEnabled === false) return 'Mod 已禁用'
+  if (!props.isModEnabled) return t('songDetail.modDisabledTooltip')
   return ''
 })
 
@@ -145,7 +148,7 @@ const hasCredits = computed(() => {
 <template>
   <div class="song-detail">
     <div v-if="!song" class="empty-detail">
-      <el-empty description="请选择一首歌曲" />
+      <el-empty :description="t('songDetail.selectSongFirst')" />
     </div>
     <template v-else>
       <!-- Song Header -->
@@ -158,12 +161,12 @@ const hasCredits = computed(() => {
         <div class="song-titles">
           <h2 class="song-name">
             {{ song.name }}
-            <el-tag v-if="song.isVanilla" type="primary" size="small" effect="light" class="vanilla-badge" :disable-transitions="true">原版</el-tag>
+            <el-tag v-if="song.isVanilla" type="primary" size="small" effect="light" class="vanilla-badge" :disable-transitions="true">{{ t('songDetail.vanillaTag') }}</el-tag>
           </h2>
           <p v-if="song.nameReading" class="song-reading">{{ song.nameReading }}</p>
           <p v-if="song.nameEn && song.nameEn !== song.name" class="song-name-en">{{ song.nameEn }}</p>
           <div class="song-badges">
-            <el-tag v-if="song.hidden" type="danger" size="small" effect="dark">隐藏</el-tag>
+            <el-tag v-if="song.hidden" type="danger" size="small" effect="dark">{{ t('songDetail.hiddenTag') }}</el-tag>
             <el-tag type="info" size="small">id {{ song.id }}</el-tag>
           </div>
         </div>
@@ -172,7 +175,7 @@ const hasCredits = computed(() => {
             class="favorite-star"
             :class="{ 'is-favorite': isFavorite }"
             @click="handleToggleFavorite"
-            :title="isFavorite ? '取消收藏' : '添加收藏'"
+            :title="isFavorite ? t('songDetail.removeFavorite') : t('songDetail.addFavorite')"
           >
             <el-icon :size="20">
               <StarFilled v-if="isFavorite" />
@@ -186,17 +189,17 @@ const hasCredits = computed(() => {
 
       <!-- Action Button -->
       <div class="action-section">
-        <el-button
-          type="primary"
-          size="large"
-          :disabled="switchButtonDisabled"
-          @click="handleSwitch"
-        >
-          <el-icon>
-            <switch-button />
-          </el-icon>
-          切换到该歌曲
-        </el-button>
+        <div>
+          <el-button
+              type="primary"
+              size="large"
+              :disabled="switchButtonDisabled"
+              :icon="SwitchButton"
+              @click="handleSwitch"
+          >
+            <div>{{ t('songDetail.switchToSong') }}</div>
+          </el-button>
+        </div>
         <p v-if="switchButtonHint" class="hint">
           {{ switchButtonHint }}
         </p>
@@ -210,7 +213,7 @@ const hasCredits = computed(() => {
           <el-icon>
             <star-filled />
           </el-icon>
-          难度详情
+          {{ t('songDetail.difficultyDetails') }}
         </h3>
 
         <!-- Style Groups (Vertical) -->
@@ -255,9 +258,9 @@ const hasCredits = computed(() => {
                       :key="chart.modId"
                       :class="['chart-item', { disabled: !chart.enabled }]"
                     >
-                      <span v-if="chart.level > 0" class="level">{{ formatLevel(chart.level) }}★</span>
+                      <span v-if="chart.level >= 0" class="level">{{ formatLevel(chart.level) }}★</span>
                       <span v-if="chart.modName" class="mod-name">{{ chart.modName }}</span>
-                      <el-tag v-if="!chart.enabled" type="info" size="small" :disable-transitions="true">已禁用</el-tag>
+                      <el-tag v-if="!chart.enabled" type="info" size="small" :disable-transitions="true">{{ t('songDetail.modDisabledStatus') }}</el-tag>
                     </div>
 
                     <!-- Multiple ChartInfo Warning -->
@@ -270,7 +273,7 @@ const hasCredits = computed(() => {
                     >
                       <span class="conflict-content">
                         <el-icon><warning /></el-icon>
-                        <span>模组冲突</span>
+                        <span>{{ t('songDetail.modConflict') }}</span>
                       </span>
                     </el-tag>
                   </div>
@@ -291,7 +294,7 @@ const hasCredits = computed(() => {
 
         <!-- No Difficulties Message -->
         <div v-if="song.difficultyDetails.length === 0" class="no-difficulties">
-          <el-empty description="暂无难度信息" />
+          <el-empty :description="t('songDetail.noDifficultyInfo')" />
         </div>
       </div>
 
@@ -303,11 +306,11 @@ const hasCredits = computed(() => {
           <el-icon>
             <info-filled />
           </el-icon>
-          歌曲信息
+          {{ t('songDetail.songInfo') }}
         </h3>
         <div class="metadata-grid">
           <div v-if="song.bpm" class="metadata-item">
-            <span class="metadata-label">BPM</span>
+            <span class="metadata-label">{{ t('songDetail.bpm') }}</span>
             <span class="metadata-value">{{ song.bpm }}</span>
           </div>
         </div>
@@ -321,35 +324,35 @@ const hasCredits = computed(() => {
           <el-icon>
             <user-filled />
           </el-icon>
-          创作者信息
+          {{ t('songDetail.credits') }}
         </h3>
         <div class="metadata-grid">
           <div v-if="song.manipulator" class="metadata-item">
-            <span class="metadata-label">调教师</span>
+            <span class="metadata-label">{{ t('songDetail.manipulator') }}</span>
             <span class="metadata-value">{{ song.manipulator }}</span>
           </div>
           <div v-if="song.music" class="metadata-item">
-            <span class="metadata-label">作曲</span>
+            <span class="metadata-label">{{ t('songDetail.music') }}</span>
             <span class="metadata-value">{{ song.music }}</span>
           </div>
           <div v-if="song.arranger" class="metadata-item">
-            <span class="metadata-label">编曲</span>
+            <span class="metadata-label">{{ t('songDetail.arranger') }}</span>
             <span class="metadata-value">{{ song.arranger }}</span>
           </div>
           <div v-if="song.guitarPlayer" class="metadata-item">
-            <span class="metadata-label">吉他</span>
+            <span class="metadata-label">{{ t('songDetail.guitarPlayer') }}</span>
             <span class="metadata-value">{{ song.guitarPlayer }}</span>
           </div>
           <div v-if="song.lyrics" class="metadata-item">
-            <span class="metadata-label">作词</span>
+            <span class="metadata-label">{{ t('songDetail.lyrics') }}</span>
             <span class="metadata-value">{{ song.lyrics }}</span>
           </div>
           <div v-if="song.illustrator" class="metadata-item">
-            <span class="metadata-label">画师</span>
+            <span class="metadata-label">{{ t('songDetail.illustrator') }}</span>
             <span class="metadata-value">{{ song.illustrator }}</span>
           </div>
           <div v-if="song.pvEditor" class="metadata-item">
-            <span class="metadata-label">PV编辑</span>
+            <span class="metadata-label">{{ t('songDetail.pvEditor') }}</span>
             <span class="metadata-value">{{ song.pvEditor }}</span>
           </div>
         </div>
@@ -363,7 +366,7 @@ const hasCredits = computed(() => {
           <el-icon>
             <folder />
           </el-icon>
-          相关来源
+          {{ t('songDetail.modInfo') }}
         </h3>
 
         <!-- Multiple Mods List -->
@@ -378,16 +381,16 @@ const hasCredits = computed(() => {
               <span class="mod-index">#{{ index + 1 }}</span>
               <span class="mod-name">{{ mod.name }}</span>
               <el-tag v-if="mod.id !== 0" :type="mod.enabled ? 'success' : 'info'" size="small" :disable-transitions="true">
-                {{ mod.enabled ? '已启用' : '已禁用' }}
+                {{ mod.enabled ? t('songDetail.modEnabled') : t('songDetail.modDisabledStatus') }}
               </el-tag>
-              <el-tag v-else type="primary" size="small" effect="plain" :disable-transitions="true">原版</el-tag>
+              <el-tag v-else type="primary" size="small" effect="plain" :disable-transitions="true">{{ t('songDetail.vanillaTag') }}</el-tag>
             </div>
             <div v-if="mod.author || mod.version" class="mod-meta">
               <span v-if="mod.author" class="mod-author">
-                作者: {{ mod.author }}
+                {{ t('songDetail.author') }}: {{ mod.author }}
               </span>
               <span v-if="mod.version" class="mod-version">
-                版本: {{ mod.version }}
+                {{ t('songDetail.version') }}: {{ mod.version }}
               </span>
             </div>
             <div v-if="mod.path && mod.id !== 0" class="mod-path" :title="mod.path">
@@ -399,7 +402,7 @@ const hasCredits = computed(() => {
         <!-- Vanilla Only (No Mod) -->
         <div v-else-if="song.isVanilla" class="mod-info-empty">
           <el-icon><collection /></el-icon>
-          <span>原版歌曲（无Mod关联）</span>
+          <span>{{ t('songDetail.vanillaSong') }}</span>
         </div>
       </div>
 
@@ -407,7 +410,7 @@ const hasCredits = computed(() => {
 
       <!-- Raw Attributes (Collapsible) -->
       <el-collapse v-if="formatAttributes.length > 0" class="attributes-collapse">
-        <el-collapse-item title="原始属性 (PVDB)" name="attributes">
+        <el-collapse-item :title="t('songDetail.rawAttributes')" name="attributes">
           <div class="attributes-list">
             <div v-for="[key, value] in formatAttributes" :key="key" class="attribute-item">
               <span class="attribute-key">{{ key }}</span>
@@ -1003,6 +1006,7 @@ const hasCredits = computed(() => {
   width: 100%;
   padding: 14px;
   font-size: 15px;
+  line-height: 0;
 }
 
 .hint {
@@ -1094,6 +1098,7 @@ const hasCredits = computed(() => {
     padding: 16px;
     font-size: 16px;
     min-height: 48px;
+    line-height: 0;
   }
 
   .style-group {
@@ -1286,6 +1291,7 @@ const hasCredits = computed(() => {
     padding: 14px;
     font-size: 15px;
     min-height: 44px;
+    line-height: 0;
   }
 
   .metadata-grid {

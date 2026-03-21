@@ -9,7 +9,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
-from .api import songs, game, system
+from .api import songs, game
 from .config import settings, IS_FROZEN
 from .utils.logger import logger
 
@@ -161,7 +161,6 @@ app.add_middleware(
 # Include API routers
 app.include_router(songs.router, prefix="/api")
 app.include_router(game.router, prefix="/api")
-app.include_router(system.router, prefix="/api")
 
 # Try to serve static frontend files
 if IS_FROZEN:

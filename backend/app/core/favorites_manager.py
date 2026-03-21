@@ -139,15 +139,3 @@ class FavoritesManager:
             Set of all favorite song IDs
         """
         return self._favorites.copy()
-
-
-# Global favorites manager instance
-_favorites_manager: FavoritesManager | None = None
-
-
-def get_favorites_manager() -> FavoritesManager:
-    """Get or create the global favorites manager instance."""
-    global _favorites_manager
-    if _favorites_manager is None:
-        _favorites_manager = FavoritesManager()
-    return _favorites_manager

@@ -1,4 +1,4 @@
-"""依赖注入容器，统一管理全局服务实例。"""
+"""Dependency injection container for managing global service instances."""
 from typing import Optional, Type, TypeVar, Dict, Any, Callable
 from functools import wraps
 import threading
@@ -7,84 +7,84 @@ T = TypeVar('T')
 
 
 class ServiceNotRegisteredError(Exception):
-    """服务未注册错误。"""
+    """Service not registered error."""
     pass
 
 
 class CircularDependencyError(Exception):
-    """循环依赖错误。"""
+    """Circular dependency error."""
     pass
 
 
 class Container:
     """
-    轻量级依赖注入容器。
+    Lightweight dependency injection container.
 
-    特性：
-    - 单例生命周期管理
-    - 延迟初始化
-    - 循环依赖检测
-    - 线程安全
+    Features:
+    - Singleton lifecycle management
+    - Lazy initialization
+    - Circular dependency detection
+    - Thread-safe
     """
 
     def __init__(self):
         self._registrations: Dict[Type, Callable[[], Any]] = {}
         self._singletons: Dict[Type, Any] = {}
         self._locks: Dict[Type, threading.Lock] = {}
-        self._resolving: set = set()  # 用于循环依赖检测
+        self._resolving: set = set()  # For circular dependency detection
 
     def register_singleton(self, interface: Type[T], factory: Callable[[], T]) -> None:
         """
-        注册单例服务。
+        Register a singleton service.
 
         Args:
-            interface: 服务接口/类型
-            factory: 创建实例的工厂函数
+            interface: Service interface/type
+            factory: Factory function to create instance
         """
         self._registrations[interface] = factory
         self._locks[interface] = threading.Lock()
 
     def register_instance(self, interface: Type[T], instance: T) -> None:
         """
-        直接注册已创建的实例。
+        Register a pre-created instance directly.
 
         Args:
-            interface: 服务接口/类型
-            instance: 服务实例
+            interface: Service interface/type
+            instance: Service instance
         """
         self._singletons[interface] = instance
 
     def resolve(self, interface: Type[T]) -> T:
         """
-        解析服务实例。
+        Resolve a service instance.
 
         Args:
-            interface: 要解析的服务类型
+            interface: Service type to resolve
 
         Returns:
-            服务实例
+            Service instance
 
         Raises:
-            ServiceNotRegisteredError: 服务未注册
-            CircularDependencyError: 检测到循环依赖
+            ServiceNotRegisteredError: Service not registered
+            CircularDependencyError: Circular dependency detected
         """
-        # 检查是否已有实例
+        # Check if instance already exists
         if interface in self._singletons:
             return self._singletons[interface]
 
-        # 检查是否已注册
+        # Check if registered
         if interface not in self._registrations:
-            raise ServiceNotRegisteredError(f"服务 {interface.__name__} 未注册")
+            raise ServiceNotRegisteredError(f"Service {interface.__name__} not registered")
 
-        # 循环依赖检测
+        # Circular dependency detection
         if interface in self._resolving:
-            raise CircularDependencyError(f"检测到循环依赖: {interface.__name__}")
+            raise CircularDependencyError(f"Circular dependency detected: {interface.__name__}")
 
-        # 创建实例（线程安全）
+        # Create instance (thread-safe)
         self._resolving.add(interface)
         try:
             with self._locks[interface]:
-                # 双重检查
+                # Double-check
                 if interface not in self._singletons:
                     factory = self._registrations[interface]
                     self._singletons[interface] = factory()
@@ -93,18 +93,18 @@ class Container:
             self._resolving.discard(interface)
 
     def clear(self) -> None:
-        """清空所有注册和实例（主要用于测试）。"""
+        """Clear all registrations and instances (mainly for testing)."""
         self._singletons.clear()
         self._resolving.clear()
 
 
-# 全局容器实例
+# Global container instance
 _container: Optional[Container] = None
 _container_lock = threading.Lock()
 
 
 def get_container() -> Container:
-    """获取全局容器实例（单例）。"""
+    """Get global container instance (singleton)."""
     global _container
     if _container is None:
         with _container_lock:
@@ -114,7 +114,7 @@ def get_container() -> Container:
 
 
 def reset_container() -> None:
-    """重置容器（主要用于测试）。"""
+    """Reset container (mainly for testing)."""
     global _container
     with _container_lock:
         _container = None
@@ -122,9 +122,9 @@ def reset_container() -> None:
 
 def inject(interface: Type[T]) -> T:
     """
-    便捷的依赖注入函数。
+    Convenient dependency injection function.
 
-    示例:
+    Example:
         pm = inject(ProcessManager)
     """
     return get_container().resolve(interface)

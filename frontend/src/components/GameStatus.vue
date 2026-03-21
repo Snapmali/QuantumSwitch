@@ -1,7 +1,10 @@
 <script setup lang="ts">
 import type { GameStatusDisplay } from '@/types'
+import { useI18n } from 'vue-i18n'
 import { getDifficultyShortLabel, getDifficultyStyle, getDifficultyDisabledStyle, getChartStyleDisplayName } from '@/types'
 import { Refresh, VideoPlay } from '@element-plus/icons-vue'
+
+const { t } = useI18n()
 
 const props = defineProps<{
   status: GameStatusDisplay | null
@@ -33,16 +36,30 @@ const getStatusType = (status: string): string => {
 
 const getStatusText = (status: string): string => {
   const map: Record<string, string> = {
-    'running': '游戏运行中',
-    'not_running': '游戏未运行',
-    'busy': '处理中',
-    'error': '错误',
+    'running': t('gameStatus.running'),
+    'not_running': t('gameStatus.notRunning'),
+    'busy': t('gameStatus.busy'),
+    'error': t('gameStatus.error'),
   }
   return map[status] || status
 }
 
-const getEdenText = (isEden: boolean): string => {
-  return isEden ? 'Eden 版本' : '标准版本'
+const getGameStateText = (state?: string): string => {
+  const map: Record<string, string> = {
+    'UNKNOWN': t('gameState.unknown'),
+    'NOT_READY': t('gameState.notReady'),
+    'LOADING': t('gameState.loading'),
+    'INTRO': t('gameState.intro'),
+    'TITLE': t('gameState.title'),
+    'RHYTHM_GAME': t('gameState.rhythmGame'),
+    'CUSTOM_PLAYLIST': t('gameState.customPlaylist'),
+    'INGAME': t('gameState.ingame'),
+    'CUSTOMIZATION': t('gameState.customization'),
+    'GALLERY': t('gameState.gallery'),
+    'MAIN_MENU': t('gameState.mainMenu'),
+    'OPTIONS': t('gameState.options'),
+  }
+  return map[state || ''] || state || t('common.unknown')
 }
 
 // 获取难度徽章样式（根据启用状态返回不同样式）
@@ -81,22 +98,22 @@ const handleSongClick = () => {
 
       <div class="status-content">
         <div class="status-header">
-          <span class="status-label">游戏状态</span>
+          <span class="status-label">{{ t('gameStatus.title') }}</span>
           <div class="status-actions">
             <el-tag
               v-if="status"
               :type="getStatusType(status.status)"
-              size="large"
+              size="small"
             >
               {{ getStatusText(status.status) }}
             </el-tag>
-            <el-tag v-else type="info" size="large">未知</el-tag>
+            <el-tag v-else type="info" size="small">{{ t('common.unknown') }}</el-tag>
             <el-button
               circle
               size="small"
               :class="{ 'is-refreshing': loading }"
               @click="handleRefresh"
-              title="立即刷新"
+              :title="t('gameStatus.refreshNow')"
             >
               <el-icon :class="{ 'is-spinning': loading }"><refresh /></el-icon>
             </el-button>
@@ -110,7 +127,7 @@ const handleSongClick = () => {
             <el-switch
               :model-value="autoRefresh"
               @update:model-value="handleAutoRefreshChange"
-              active-text="自动刷新"
+              :active-text="t('gameStatus.autoRefresh')"
               inline-prompt
             />
             <template v-if="autoRefresh">
@@ -134,19 +151,14 @@ const handleSongClick = () => {
           <div class="status-details">
             <div class="detail-row">
               <div class="detail-item">
-                <span class="detail-label">版本:</span>
+                <span class="detail-label">{{ t('gameStatus.gameState') }}:</span>
                 <el-tag
-                  :type="status.isEdenVersion ? 'warning' : 'success'"
+                  :type="status.gameState === 'INGAME' ?
+                  'success' : ['UNKNOWN', 'NOT_READY', null, undefined, ''].includes(status.gameState) ?
+                  'warning' : 'primary'"
                   size="small"
                 >
-                  {{ getEdenText(status.isEdenVersion) }}
-                </el-tag>
-              </div>
-
-              <div class="detail-item">
-                <span class="detail-label">偏移量:</span>
-                <el-tag size="small" type="info" class="offset-tag">
-                  <code class="offset-code">0x{{ (status.edenOffset ?? 0).toString(16).toUpperCase() }}</code>
+                  {{ getGameStateText(status.gameState) }}
                 </el-tag>
               </div>
             </div>
@@ -160,7 +172,7 @@ const handleSongClick = () => {
                     <el-icon :size="24"><VideoPlay /></el-icon>
                   </div>
                   <div class="song-info">
-                    <div class="song-label">当前选择</div>
+                    <div class="song-label">{{ t('gameStatus.currentSelection') }}</div>
                     <div class="song-name" :title="status.currentSongInfo.name">
                       {{ status.currentSongInfo.name }}
                     </div>
@@ -197,19 +209,19 @@ const handleSongClick = () => {
 
     <el-alert
       v-if="status?.status === 'not_running'"
-      title="提示"
+      :title="t('common.info')"
       type="warning"
       :closable="false"
       class="status-alert"
     >
-      请先启动 Project DIVA MegaMix+ 游戏
+      {{ t('gameStatus.gameNotRunningTip') }}
     </el-alert>
   </div>
 </template>
 
 <style scoped>
 .game-status {
-  margin-bottom: 16px;
+  margin-bottom: 0;
 }
 
 .status-content {
@@ -230,7 +242,6 @@ const handleSongClick = () => {
 .status-details {
   display: flex;
   flex-direction: column;
-  gap: 8px;
 }
 
 .detail-row {
@@ -268,6 +279,7 @@ const handleSongClick = () => {
 
 .status-alert {
   margin-top: 12px;
+  margin-bottom: 0;
 }
 
 .refresh-controls.compact {
@@ -467,8 +479,6 @@ const handleSongClick = () => {
 .song-label {
   font-size: 12px;
   color: var(--el-text-color-secondary);
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
 }
 
 .song-name {

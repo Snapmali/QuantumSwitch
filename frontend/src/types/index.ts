@@ -8,6 +8,49 @@ export enum DifficultyType {
 }
 
 // ============================================
+// Alias types
+// ============================================
+
+export interface SongAlias {
+  id: string
+  alias: string
+  songName: string
+}
+
+export interface SongAliasMatchItem {
+  alias: string
+  songName: string
+}
+
+export interface CreateAliasRequest {
+  alias: string
+  songName: string
+}
+
+export interface UpdateAliasRequest {
+  alias?: string
+  songName?: string
+}
+
+export interface ToggleFavoriteRequest {
+  songId: number
+}
+
+// ============================================
+// Mod search types
+// ============================================
+
+export interface ModInfoSearchItem {
+  id: number
+  name: string
+  path?: string
+  enabled: boolean
+  author?: string
+  version?: string
+  songCount?: number
+}
+
+// ============================================
 // 统一难度颜色配置 - 所有组件都应使用这里的定义
 // ============================================
 
@@ -103,7 +146,6 @@ export function getDifficultyLabel(diffName: string): string {
 
 /** 格式化等级显示 */
 export function formatLevel(level: number): string {
-  if (level === 0) return ''
   return Number.isInteger(level) ? level.toString() : level.toFixed(1)
 }
 
@@ -296,29 +338,19 @@ export interface GameStatus {
   running: boolean
   processId?: number
   currentSongId?: number
-  currentSortId?: number
-  currentDifficulty?: number
-  currentDifficultyName?: string
-  gameState?: number
-  edenVersion: boolean
-  edenOffset: number
-  currentSongInfo?: CurrentSongInfo  // 新增：当前歌曲信息
-  currentChartStyle?: string  // 新增：当前 ChartStyle (ARCADE/CONSOLE/MIXED)
-  isIngame?: boolean  // 新增：是否正在游玩中
+  gameState?: string  // Game state enum name: "LOADING", "CUSTOM_PLAYLIST", etc.
+  currentSongInfo?: CurrentSongInfo  // 当前歌曲信息
+  currentChartStyle?: string  // 当前 ChartStyle (ARCADE/CONSOLE/MIXED)
+  isIngame?: boolean  // 是否正在游玩中
 }
 
 // Game status display format for GameStatus component
 export interface GameStatusDisplay {
   status: 'running' | 'not_running' | 'busy' | 'error'
-  isEdenVersion: boolean
-  edenOffset: number
-  currentSong?: {
-    name: string
-    difficultyType: string
-  }
-  currentSongInfo?: CurrentSongInfo  // 新增：当前歌曲完整信息
-  currentChartStyle?: string  // 新增：当前 ChartStyle
-  isIngame?: boolean  // 新增：是否正在游玩中
+  gameState?: string  // Game state enum name for display
+  currentSongInfo?: CurrentSongInfo  // 当前歌曲完整信息
+  currentChartStyle?: string  // 当前 ChartStyle
+  isIngame?: boolean  // 是否正在游玩中
 }
 
 // API response wrapper
@@ -336,6 +368,7 @@ export interface PaginatedResponse<T> {
   pageSize: number
   totalPages: number
   hiddenCount?: number
+  matchedAliases?: SongAliasMatchItem[]
 }
 
 // Song list response (alias for PaginatedResponse<Song>)
@@ -356,17 +389,6 @@ export interface SwitchSongResponse {
   actualDifficulty?: number
   actualDifficultyName?: string
   requiresDelayedUpdate?: boolean
-}
-
-// App config - matches backend ConfigResponse
-export interface AppConfig {
-  appName?: string
-  appVersion: string
-  gameProcessName: string
-  gameRunning: boolean
-  gameBaseAddress?: string
-  edenOffsetApplied?: boolean
-  pvdbFiles: string[]
 }
 
 // Filter options

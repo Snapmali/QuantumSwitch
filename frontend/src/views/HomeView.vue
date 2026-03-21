@@ -1,7 +1,9 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, computed, watch } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { useSongStore } from '@/stores/songs'
 import { useGameStore } from '@/stores/game'
+import { useLocaleStore } from '@/stores/locale'
 import { ElMessage } from 'element-plus'
 import type { Song } from '@/types'
 import { songApi } from '@/api'
@@ -9,15 +11,23 @@ import SongList from '@/components/SongList.vue'
 import SongDetail from '@/components/SongDetail.vue'
 import GameStatus from '@/components/GameStatus.vue'
 import WarningDialog from '@/components/WarningDialog.vue'
+import LanguageSwitch from '@/components/LanguageSwitch.vue'
+import AliasManager from '@/components/AliasManager.vue'
+import { CollectionTag } from '@element-plus/icons-vue'
 
+const { t } = useI18n()
 const songStore = useSongStore()
 const gameStore = useGameStore()
+useLocaleStore() // Initialize locale store
 const warningDialog = ref<InstanceType<typeof WarningDialog> | null>(null)
 const currentPage = ref(1)
 const pageSize = ref(20)
 
 // 使用 ref 存储选中歌曲的完整数据，翻页时不会丢失
 const selectedSongData = ref<Song | null>(null)
+
+// Alias manager dialog visibility
+const aliasManagerVisible = ref(false)
 
 const selectedSong = computed(() => {
   if (!songStore.selectedId) return null
@@ -27,6 +37,16 @@ const selectedSong = computed(() => {
   }
   // 否则从当前列表中查找
   return songStore.songs.find(s => s.id === songStore.selectedId) || null
+})
+
+// Matched aliases from search
+const matchedAliases = computed(() => songStore.matchedAliases)
+
+// Mod search related computed
+const matchedMods = computed(() => songStore.matchedMods)
+const searchMode = computed({
+  get: () => songStore.searchMode,
+  set: (value: 'song' | 'mod') => songStore.setSearchMode(value)
 })
 
 const selectedStyle = computed(() => songStore.selectedStyle)
@@ -76,7 +96,7 @@ const handleDifficultySelect = (style: string, difficultyType: number) => {
 
 const handleSwitchSong = async () => {
   if (!selectedSong.value || selectedDifficultyType.value === null) {
-    ElMessage.warning('请先选择歌曲和难度')
+    ElMessage.warning(t('messages.selectSongFirst'))
     return
   }
 
@@ -95,7 +115,7 @@ const handlePageChange = (page: number) => {
 const handleRefreshSongs = async () => {
   await songStore.reloadSongs()
   currentPage.value = 1
-  ElMessage.success('歌曲列表已刷新')
+  ElMessage.success(t('messages.songsRefreshed'))
 }
 
 const handleSearch = async (query: string) => {
@@ -117,14 +137,26 @@ const handleFavoritesOnlyChange = (value: boolean) => {
   songStore.setFavoritesOnly(value)
 }
 
+const handleSearchModeChange = (value: 'song' | 'mod') => {
+  songStore.setSearchMode(value)
+}
+
+const handleSearchMods = async (query: string) => {
+  await songStore.searchMods(query)
+}
+
+const handleSelectMod = async (mod: { id: number; name: string }) => {
+  await songStore.selectMod(mod.id, mod.name)
+}
+
 const handleCurrentSongClick = async (songId: number) => {
-  // 检查是否已在当前列表中
+  // Check if already in current list
   const existingSong = songStore.songs.find(s => s.id === songId)
   if (existingSong) {
-    // 如果在当前列表中，直接选中
+    // If in current list, select directly
     await handleSongSelect(existingSong)
   } else {
-    // 如果不在当前列表中，通过 API 获取完整歌曲信息
+    // If not in current list, get full song info via API
     try {
       const response = await songApi.getById(songId)
       if (response.data.data) {
@@ -132,7 +164,7 @@ const handleCurrentSongClick = async (songId: number) => {
         await handleSongSelect(song)
       }
     } catch (err) {
-      ElMessage.error('无法获取歌曲信息')
+      ElMessage.error(t('messages.cannotGetSongInfo'))
     }
   }
 }
@@ -146,9 +178,20 @@ const handleCurrentSongClick = async (songId: number) => {
       <div class="header-content">
         <h1>
           <img src="/icon.ico" alt="icon" class="header-icon" />
-          Quantum Switch
+          {{ t('home.title') }}
         </h1>
-        <span class="version">v1.0.0</span>
+        <div class="header-actions">
+          <span class="version">v1.0.0</span>
+          <el-button
+            type="default"
+            size="small"
+            :icon="CollectionTag"
+            @click="aliasManagerVisible = true"
+          >
+            {{ t('alias.manageButton') }}
+          </el-button>
+          <LanguageSwitch />
+        </div>
       </div>
     </header>
 
@@ -174,12 +217,18 @@ const handleCurrentSongClick = async (songId: number) => {
               :page-size="pageSize"
               :favorites="songStore.favorites"
               :favorites-only="songStore.favoritesOnly"
+              :matched-aliases="matchedAliases"
+              :search-mode="searchMode"
+              :matched-mods="matchedMods"
               @select="handleSongSelect"
               @page-change="handlePageChange"
               @refresh="handleRefreshSongs"
               @search="handleSearch"
               @toggle-favorite="handleToggleFavorite"
               @update:favorites-only="handleFavoritesOnlyChange"
+              @update:search-mode="handleSearchModeChange"
+              @search-mods="handleSearchMods"
+              @select-mod="handleSelectMod"
             />
           </el-card>
         </div>
@@ -202,6 +251,9 @@ const handleCurrentSongClick = async (songId: number) => {
         </div>
       </div>
     </main>
+
+    <!-- Alias Manager Dialog -->
+    <AliasManager v-model:visible="aliasManagerVisible" />
   </div>
 </template>
 
@@ -248,9 +300,14 @@ const handleCurrentSongClick = async (songId: number) => {
 .version {
   font-size: 12px;
   color: var(--el-text-color-secondary);
-  background: var(--el-fill-color);
   padding: 4px 12px;
   border-radius: 12px;
+}
+
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
 }
 
 .main-content {
@@ -272,7 +329,7 @@ const handleCurrentSongClick = async (songId: number) => {
 .right-column {
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 12px;
   min-height: 0;
 }
 

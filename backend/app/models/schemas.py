@@ -4,6 +4,12 @@ from pathlib import Path
 from pydantic import BaseModel, Field, ConfigDict
 from typing import Optional, Any, List, Generic, TypeVar
 
+from app.models.chart import ChartStyle, ChartInfo
+from app.models.difficulty_type import DifficultyType
+from app.models.game_state import GameState
+from app.models.song import Song
+from app.utils.logger import logger
+
 T = TypeVar("T")
 
 
@@ -101,16 +107,14 @@ class SongResponse(BaseModel):
     isFavorite: bool = False  # 是否已收藏
 
     @classmethod
-    def from_song(cls, song, favorites: set[int] | None = None) -> "SongResponse":
+    def from_song(cls, song: Song, favorites: set[int] | None = None) -> "SongResponse":
         """Create SongResponse from a Song dataclass with hierarchical difficulty structure."""
-        from app.models.song import ChartStyle, DifficultyType
-
         # Build Mod lookup: mod_id -> ModInfo
         mod_map = {m.id: m for m in song.mod_infos}
 
         # Group chart_infos by ChartStyle and then by DifficultyType
         # Structure: {ChartStyle: {DifficultyType: [ChartInfo]}}
-        style_groups: dict[ChartStyle, dict[DifficultyType, list]] = {}
+        style_groups: dict[ChartStyle, dict[DifficultyType, list[ChartInfo]]] = {}
 
         for chart in song.chart_infos:
             style = chart.style if chart.style else ChartStyle.MIXED
@@ -174,19 +178,24 @@ class SongResponse(BaseModel):
                     mod = mod_map.get(chart.mod_id)
                     mod_name = mod.name if mod else None
 
-                    chart_infos.append(
-                        ChartInfoDetail(
-                            level=chart.level,
-                            edition=chart.edition,
-                            scriptPath=chart.script_file_name,
-                            isExtra=chart.is_extra,
-                            isOriginal=chart.is_original,
-                            isSlide=chart.is_slide,
-                            modId=chart.mod_id,
-                            modName=mod_name,
-                            enabled=is_enabled,
+                    try:
+                        chart_infos.append(
+                            ChartInfoDetail(
+                                level=chart.level,
+                                edition=chart.edition,
+                                scriptPath=chart.script_file_name,
+                                isExtra=chart.is_extra,
+                                isOriginal=chart.is_original,
+                                isSlide=chart.is_slide,
+                                modId=chart.mod_id,
+                                modName=mod_name,
+                                enabled=is_enabled,
+                            )
                         )
-                    )
+                    except Exception as e:
+                        logger.error(f"Failed to parse chart info: song_id={song.id} diff={chart.type} "
+                                     f"style={chart.style.name if chart.style else None} mod_name='{mod_name}', "
+                                     f"with exception: {e}")
 
                 # Sort chart_infos: enabled first, then by level
                 chart_infos.sort(key=lambda c: (-c.enabled, -c.level))
@@ -246,6 +255,60 @@ class SongResponse(BaseModel):
         )
 
 
+class SongAlias(BaseModel):
+    """Song alias entry."""
+    model_config = ConfigDict(populate_by_name=True)
+
+    id: str
+    alias: str
+    songName: str
+
+
+class SongAliasMatchItem(BaseModel):
+    """Matched alias item for search results."""
+    model_config = ConfigDict(populate_by_name=True)
+
+    alias: str
+    songName: str
+
+
+class ModInfoSearchItem(BaseModel):
+    """Mod search result item."""
+    model_config = ConfigDict(populate_by_name=True)
+
+    id: int
+    name: str
+    path: Optional[str] = None
+    enabled: bool = True
+    author: Optional[str] = None
+    version: Optional[str] = None
+    songCount: int = Field(default=0, alias="songCount")  # Number of songs in this mod
+
+
+class CreateAliasRequest(BaseModel):
+    """Request schema for creating an alias."""
+    model_config = ConfigDict(populate_by_name=True)
+
+    alias: str = Field(..., description="The alias text")
+    songName: str = Field(..., description="The actual song name")
+
+
+class UpdateAliasRequest(BaseModel):
+    """Request schema for updating an alias."""
+    model_config = ConfigDict(populate_by_name=True)
+
+    id: str = Field(..., description="The alias ID to update")
+    alias: Optional[str] = Field(None, description="New alias text")
+    songName: Optional[str] = Field(None, description="New song name")
+
+
+class ToggleFavoriteRequest(BaseModel):
+    """Request schema for toggling favorite status."""
+    model_config = ConfigDict(populate_by_name=True)
+
+    songId: int = Field(..., description="The song ID to toggle favorite status")
+
+
 class SongListResponse(BaseModel):
     """Response schema for song list."""
     model_config = ConfigDict(populate_by_name=True)
@@ -256,6 +319,7 @@ class SongListResponse(BaseModel):
     pageSize: int = Field(default=20)
     totalPages: int = Field(default=1)
     hiddenCount: int = Field(default=0)
+    matchedAliases: List[SongAliasMatchItem] = Field(default_factory=list)
 
 
 class CurrentSongDifficultyInfo(BaseModel):
@@ -283,12 +347,7 @@ class GameStatusResponse(BaseModel):
     running: bool
     processId: Optional[int] = None
     currentSongId: Optional[int] = None
-    currentSortId: Optional[int] = None
-    currentDifficulty: Optional[int] = None
-    currentDifficultyName: Optional[str] = None
-    gameState: Optional[int] = None
-    edenVersion: bool = False
-    edenOffset: int = 0
+    gameState: Optional[str] = None
     currentSongInfo: Optional[CurrentSongInfo] = None  # 新增：当前歌曲信息
     currentChartStyle: Optional[str] = None  # 新增：当前 ChartStyle (ARCADE/CONSOLE/MIXED)
     isIngame: bool = False  # 新增：是否正在游玩中
@@ -322,27 +381,3 @@ class ApiResponse(BaseModel, Generic[T]):
     success: bool
     data: Optional[T] = None
     error: Optional[str] = None
-
-
-class ConfigResponse(BaseModel):
-    """Response schema for configuration."""
-    model_config = ConfigDict(populate_by_name=True)
-
-    appName: str = Field(default="Quantum Switch")
-    appVersion: str
-    gameProcessName: str
-    gameRunning: bool
-    gameBaseAddress: Optional[str] = None
-    edenOffsetApplied: Optional[bool] = None
-    pvdbFiles: List[str] = Field(default_factory=list)
-
-
-class CurrentSongResponse(BaseModel):
-    """Response schema for current song."""
-    model_config = ConfigDict(populate_by_name=True)
-
-    songId: Optional[int] = None
-    sortId: Optional[int] = None
-    difficulty: Optional[int] = None
-    difficultyName: Optional[str] = None
-    songName: Optional[str] = None

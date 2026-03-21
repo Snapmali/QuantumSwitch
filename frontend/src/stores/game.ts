@@ -3,7 +3,6 @@ import { ref, computed } from 'vue'
 import { gameApi } from '@/api'
 import type { GameStatus, GameStatusDisplay, SwitchSongRequest } from '@/types'
 import { ElMessage } from 'element-plus'
-import { useSongStore } from './songs'
 
 export const useGameStore = defineStore('game', () => {
   // State
@@ -11,12 +10,7 @@ export const useGameStore = defineStore('game', () => {
     running: false,
     processId: undefined,
     currentSongId: undefined,
-    currentSortId: undefined,
-    currentDifficulty: undefined,
-    currentDifficultyName: undefined,
     gameState: undefined,
-    edenVersion: false,
-    edenOffset: 0,
     currentSongInfo: undefined,
     currentChartStyle: undefined,
     isIngame: undefined,
@@ -29,49 +23,26 @@ export const useGameStore = defineStore('game', () => {
 
   // Getters
   const isRunning = computed(() => status.value.running)
-  const isReady = computed(() => status.value.running && status.value.gameState === 6)
-  const isBusy = computed(() => status.value.running && status.value.gameState === 5)
   const currentState = computed(() => status.value.gameState)
   const currentPvId = computed(() => status.value.currentSongId)
-  const currentDifficulty = computed(() => status.value.currentDifficulty)
-  const edenDetected = computed(() => status.value.edenVersion)
-  const edenOffset = computed(() => status.value.edenOffset)
 
   // Convert to display format for GameStatus component
   const statusDisplay = computed((): GameStatusDisplay | null => {
     const s = status.value
     if (!s) return null
 
-    // Determine status string
+    // Determine status string based on game state
     let statusStr: 'running' | 'not_running' | 'busy' | 'error' = 'not_running'
     if (s.running) {
-      if (s.gameState === 5) {
-        statusStr = 'busy'
-      } else if (s.gameState === 6) {
         statusStr = 'running'
-      } else {
-        statusStr = 'running'
-      }
     }
 
     const display: GameStatusDisplay = {
       status: statusStr,
-      isEdenVersion: s.edenVersion,
-      edenOffset: s.edenOffset,
+      gameState: s.gameState,
       currentSongInfo: s.currentSongInfo,
       currentChartStyle: s.currentChartStyle,
       isIngame: s.isIngame,
-    }
-
-    // Add current song info if available
-    if (s.currentSongId && s.currentDifficultyName) {
-      // Try to get actual song name from songs store
-      const songsStore = useSongStore()
-      const songInfo = songsStore.songByPvId(s.currentSongId)
-      display.currentSong = {
-        name: songInfo?.name || `PV ${s.currentSongId}`,
-        difficultyType: s.currentDifficultyName,
-      }
     }
 
     return display
@@ -155,13 +126,8 @@ export const useGameStore = defineStore('game', () => {
     autoRefresh,
     refreshIntervalMs,
     isRunning,
-    isReady,
-    isBusy,
     currentState,
     currentPvId,
-    currentDifficulty,
-    edenDetected,
-    edenOffset,
     statusDisplay,
     refreshStatus,
     switchSong,

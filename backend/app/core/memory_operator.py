@@ -84,25 +84,25 @@ class MemoryOperator:
         dll_pattern_offset: Optional[DllPatternOffset] = None
     ) -> int:
         """
-        计算实际内存地址
+        Calculate the actual memory address.
 
         Args:
-            base_addr: 基础地址或偏移量
-            apply_eden: 是否使用 Eden 偏移
-            dll: 若指定，则 base_addr 视为该 DLL 的偏移量
-            dll_pattern_offset: 若指定，基于已缓存的 DLL 特征基址 + 偏移量计算地址
+            base_addr: Base address or offset
+            apply_eden: Whether to apply Eden offset
+            dll: If specified, base_addr is treated as an offset from this DLL
+            dll_pattern_offset: If specified, address is calculated from cached DLL pattern base + offset
 
-        当指定 dll_pattern_offset 时 (优先级最高):
-            最终地址 = 特征码在 DLL 中的地址 + dll_pattern_offset.offset + base_addr (若提供)
+        When dll_pattern_offset is specified (highest priority):
+            Final address = Pattern address in DLL + dll_pattern_offset.offset + base_addr (if provided)
 
-        当指定 dll 时:
-            最终地址 = DLL 基址 + base_addr (作为偏移)
-            忽略进程基址和 Eden 偏移
+        When dll is specified:
+            Final address = DLL base + base_addr (as offset)
+            Ignores process base and Eden offset
 
-        未指定 dll 时:
-            最终地址 = base_addr + 进程基址 + Eden 偏移
+        When neither is specified:
+            Final address = base_addr + process base + Eden offset
         """
-        # DllPatternOffset 模式：基于特征码地址 + 偏移
+        # DllPatternOffset mode: based on pattern address + offset
         if dll_pattern_offset is not None:
             pattern = dll_pattern_offset.dll_pattern
             dll_enum = pattern.dll
@@ -120,7 +120,7 @@ class MemoryOperator:
             )
             return result
 
-        # DLL 模式：忽略其他偏移，只计算 DLL 偏移
+        # DLL mode: ignore other offsets, only calculate DLL offset
         if dll is not None:
             dll_base: Optional[ProcessModule] = self._pm.get_cached_dll(dll)
             if dll_base is None:
@@ -134,7 +134,7 @@ class MemoryOperator:
             )
             return result
 
-        # 标准模式：原有的计算逻辑
+        # Standard mode: original calculation logic
         eden_offset = 0
         if apply_eden and base_addr:
             eden_offset += self.eden_offset or 0
@@ -202,11 +202,11 @@ class MemoryOperator:
             error = kernel32.GetLastError()
             logger.error(f"ReadProcessMemory failed at 0x{actual_address:08X}, error: {error}")
             if error == 5:
-                logger.error("错误代码5: 访问被拒绝 - 请以管理员身份运行后端")
+                logger.error("Error code 5: Access denied - please run the backend as administrator")
             elif error == 6:
-                logger.error("错误代码6: 无效句柄")
+                logger.error("Error code 6: Invalid handle")
             elif error == 299:
-                logger.error("错误代码299: 部分复制 - 地址可能无效")
+                logger.error("Error code 299: Partial copy - address may be invalid")
             return None
 
         return buffer.raw[:bytes_read.value]
@@ -368,26 +368,3 @@ class MemoryOperator:
             dll=dll,
             dll_pattern_offset=dll_pattern_offset
         )
-
-    def get_game_state(self) -> Optional[int]:
-        """
-        Read the current game state.
-        Returns the value from the START_CHANGE address.
-        """
-        return self.read_int(settings.START_CHANGE_ADDR)
-
-    def get_last_selection(self) -> Tuple[Optional[int], Optional[int], Optional[int]]:
-        """
-        Get current song selection data.
-
-        Returns:
-            Tuple of (pvid, sort_id, difficulty) or (None, None, None) if failed
-        """
-        pvid = self.read_int(settings.LAST_SELECT_PVID_ADDR, apply_eden=True)
-        sort_id = self.read_int(settings.LAST_SELECT_SORT_ADDR, apply_eden=True)
-        diff_type = self.read_int(settings.LAST_SELECT_DIFF_TYPE_ADDR, apply_eden=True)
-        diff_level = self.read_int(settings.LAST_SELECT_DIFF_LEVEL_ADDR, apply_eden=True)
-
-        logger.debug(f"pvid: {pvid}, sort_id: {sort_id}, diff_type: {diff_type}, diff_level: {diff_level}")
-
-        return pvid, sort_id, diff_type

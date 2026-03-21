@@ -1,5 +1,16 @@
+<script setup lang="ts">
+import { computed } from 'vue'
+import { ElConfigProvider } from 'element-plus'
+import { useLocaleStore } from '@/stores/locale'
+
+const localeStore = useLocaleStore()
+const locale = computed(() => localeStore.elementPlusLocale)
+</script>
+
 <template>
-  <router-view />
+  <el-config-provider :locale="locale">
+    <router-view />
+  </el-config-provider>
 </template>
 
 <style>

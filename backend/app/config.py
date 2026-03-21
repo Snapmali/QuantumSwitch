@@ -63,17 +63,26 @@ class Settings(BaseSettings):
     GAME_DIRECTORY: Optional[Path] = None
     GAME_MODS_DIRECTORY: Optional[Path] = None
 
-    # Memory addresses (base addresses, may need Eden offset)
+    # PVDB file names
+    PVDB_FILES: list[str] = ["mod_pv_db.txt", "mdata_pv_db.txt"]
+
+    # ========== Addresses ==========
+
+    # Current pvid addresses (not affected by Eden offset)
     CURR_PVID_BASE_PTR_ADDR: int = 0xCC5EF18
     CURR_PVID_SONG_SELECTION_OFFSET_PTR_ADDR: int = 0x6EFE8C
     CURR_PVID_SONG_SELECTION_OFFSET_PTR_OFFSET: int = 0x9C8
 
+    # Game state addresses (not affected by Eden offset)
+    GAME_STATE_LAST_ADDR: int = 0xCC6109C
+    GAME_STATE_CURR_ADDR: int = 0xCC61094
+    GAME_STATE_NEXT_ADDR: int = 0xCC61098
+
     # Control addresses (not affected by Eden offset)
-    CHANGE_SONG_SELECT_ADDR: int = 0xCC61098
     START_CHANGE_ADDR: int = 0xCC610A0
 
+    # New Classics version 1.2.0
     CONSOLE_MODE_CHANGE_ADDR: int = 0x114F80
-    """The offset of NewClassics.dll ver 1.2.0, used to set console mode"""
 
     # Data addresses (maybe affected by Eden offset)
     LAST_SELECT_PVID_ADDR: int = 0x12B6350
@@ -86,9 +95,6 @@ class Settings(BaseSettings):
     # Eden offset configuration
     # Detection: Read LAST_SELECT_PVID_ADDR (0x12B6350), if value is 0, apply offset 0x105F460
     EDEN_OFFSET: int = 0x105F460
-
-    # PVDB file names
-    PVDB_FILES: list[str] = ["mod_pv_db.txt", "mdata_pv_db.txt"]
 
     # DLL 白名单 - 仅缓存这些 DLL
     CACHED_DLLS: list[str] = [

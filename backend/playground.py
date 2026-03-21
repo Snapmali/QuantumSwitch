@@ -12,14 +12,15 @@ from typing import Optional
 from app.config import settings, DllEnum
 from app.core import SongSelector, MemoryOperator, ProcessManager
 from app.core.bootstrap import _init_game_directories
-from app.models import ChartStyle
-from app.models.song import Song, DifficultyType
+from app.core.game_status_processor import GameStatusProcessor
+from app.models import ChartStyle, DifficultyType, Song
 from app.utils.logger import logger
 
 # Global instances
 _pm: Optional[ProcessManager] = None
 _mem: Optional[MemoryOperator] = None
 _song_selector: Optional[SongSelector] = None
+_gsp: Optional[GameStatusProcessor]
 
 # Status log file for external monitoring
 STATUS_LOG_FILE: Optional[Path] = None
@@ -60,7 +61,7 @@ STYLE_MAP = {
 
 def init():
     """Initialize global instances and attach to game process."""
-    global _pm, _mem, _song_selector, STATUS_LOG_FILE
+    global _pm, _mem, _song_selector, _gsp, STATUS_LOG_FILE
 
     logger.info("Initializing playground...")
 
@@ -73,6 +74,7 @@ def init():
     _pm = ProcessManager()
     _mem = MemoryOperator(_pm)
     _song_selector = SongSelector(_mem)
+    _gsp = GameStatusProcessor(_pm, _mem)
     _init_game_directories()
 
     # Attach to game process
@@ -91,15 +93,17 @@ def print_status():
 
     try:
         # Read key memory addresses
-        menu = _mem.read_int(settings.CHANGE_SONG_SELECT_ADDR)
-        game_mode = _mem.read_int(settings.CONSOLE_MODE_CHANGE_ADDR, dll=DllEnum.NEW_CLASSICS)
+        last_menu = _mem.read_int(settings.GAME_STATE_LAST_ADDR)
+        curr_menu = _mem.read_int(settings.GAME_STATE_CURR_ADDR)
+        next_menu = _mem.read_int(settings.GAME_STATE_NEXT_ADDR)
+        chart_style = _gsp.get_current_style()
         pvid = _mem.read_int(settings.LAST_SELECT_PVID_ADDR, apply_eden=True)
         sort_id = _mem.read_int(settings.LAST_SELECT_SORT_ADDR, apply_eden=True)
         diff_type = _mem.read_int(settings.LAST_SELECT_DIFF_TYPE_ADDR, apply_eden=True)
         diff_level = _mem.read_int(settings.LAST_SELECT_DIFF_LEVEL_ADDR, apply_eden=True)
 
         status_msg = (
-            f"[Memory Status] menu={menu}, game_mode={game_mode}, "
+            f"[Memory Status] last_menu={last_menu} curr_menu={curr_menu} next_menu={next_menu}, chart_style={chart_style}, "
             f"pvid={pvid}, sort_id={sort_id}, diff_type={diff_type}, diff_level={diff_level}"
         )
 
@@ -111,7 +115,7 @@ def print_status():
                     f.write(f"{timestamp} | {status_msg}\n")
             except Exception:
                 pass  # Silently fail if file cannot be written
-    except Exception:
+    except Exception as e:
         pass  # Silently fail if memory read fails
 
 

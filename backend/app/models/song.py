@@ -1,85 +1,10 @@
 """Song data models."""
 from dataclasses import dataclass, field
-from enum import Enum
-from typing import Optional, Set, List
+from typing import Optional, List
 
+from app.models.chart import ChartInfo, NcChartInfo
+from app.models.difficulty_type import DifficultyType
 from app.models.mod_info import ModInfo
-
-class ChartStyle(Enum):
-    """NC difficulty style types."""
-    ARCADE = "ARCADE"
-    CONSOLE = "CONSOLE"
-    MIXED = "MIXED"
-
-    @classmethod
-    def from_string(cls, value: str) -> Optional["ChartStyle"]:
-        """Parse ChartStyle from string (case-insensitive)."""
-        if not value:
-            return None
-        try:
-            return cls(value.upper())
-        except ValueError:
-            return None
-
-
-class DifficultyType(Enum):
-    """Difficulty types for songs."""
-    EASY = 0
-    NORMAL = 1
-    HARD = 2
-    EXTREME = 3
-    EXTRA_EXTREME = 4
-    RESERVED = 5
-
-    @property
-    def display_name(self) -> str:
-        """Get the display name for the difficulty."""
-        names = {
-            DifficultyType.EASY: "EASY",
-            DifficultyType.NORMAL: "NORMAL",
-            DifficultyType.HARD: "HARD",
-            DifficultyType.EXTREME: "EXTREME",
-            DifficultyType.EXTRA_EXTREME: "EXTRA EXTREME",
-            DifficultyType.RESERVED: "RESERVED",
-        }
-        return names.get(self, self.name)
-
-    @property
-    def short_name(self) -> str:
-        """Get the short name for the difficulty."""
-        names = {
-            DifficultyType.EASY: "E",
-            DifficultyType.NORMAL: "N",
-            DifficultyType.HARD: "H",
-            DifficultyType.EXTREME: "Ex",
-            DifficultyType.EXTRA_EXTREME: "EX",
-            DifficultyType.RESERVED: "R",
-        }
-        return names.get(self, self.name[0])
-
-
-@dataclass
-class ChartInfo:
-    """Chart information with level and script path."""
-    style: Optional[ChartStyle]
-    type: DifficultyType
-    level: float = 0.0  # 星级 1-20，支持小数如 6.5
-    edition: int = 0
-    script_file_name: Optional[str] = None
-    is_extra: bool = False  # 是否为 EXTRA EXTREME
-    is_original: bool = False  # 是否为原谱
-    is_slide: bool = False  # 是否为滑动谱
-    index: int = 0  # 同类型难度的索引，用于区分多个 EXTREME
-    mod_id: int = 0 # 来源 Mod ID
-
-
-@dataclass
-class NcChartInfo:
-    """NC database difficulty entry."""
-    difficulty_type: DifficultyType  # "easy", "normal", "hard", "extreme", "ex_extreme"
-    style: ChartStyle
-    level: Optional[float] = None  # Parsed from PV_LV_WW_D
-    script_file_name: Optional[str] = None
 
 
 @dataclass
@@ -155,55 +80,6 @@ class Song:
 
         return None
 
-    def to_dict(self) -> dict:
-        """Convert song to dictionary."""
-        return {
-            "id": self.id,
-            "name": self.name,  # 日文原名
-            "nameEn": self.name_en,
-            "nameReading": self.name_reading,
-            "difficulties": [d.value for d in self.difficulties],
-            "difficultyNames": [d.display_name for d in self.difficulties],
-            "difficultyDetails": [
-                {
-                    "type": d.type.value,
-                    "name": d.type.display_name,
-                    "level": d.level,
-                    "edition": d.edition,
-                    "scriptPath": d.script_file_name,
-                    "isExtra": d.is_extra,
-                    "isOriginal": d.is_original,
-                    "isSlide": d.is_slide,
-                    "index": d.index,
-                }
-                for d in self.chart_infos
-            ],
-            "hidden": self.hidden,
-            "modInfos": [
-                {
-                    "id": m.id,
-                    "name": m.name,
-                    "path": m.path,
-                    "enabled": m.enabled,
-                    "author": m.author,
-                    "version": m.version,
-                } for m in self.mod_infos
-            ],
-            "modEnabled": self.mod_enabled,
-            "isVanilla": self.is_vanilla,
-            "bpm": self.bpm,
-            "description": self.description,
-            "attributes": self.attributes,
-            # Song credits from songinfo
-            "music": self.music,
-            "arranger": self.arranger,
-            "lyrics": self.lyrics,
-            "guitarPlayer": self.guitar_player,
-            "illustrator": self.illustrator,
-            "manipulator": self.manipulator,
-            "pvEditor": self.pv_editor,
-        }
-
     def get_difficulty_level(self, difficulty: DifficultyType) -> float:
         """Get star level for a difficulty."""
         info = self.get_difficulty_info(difficulty)
@@ -218,27 +94,3 @@ class NcSong:
     mod_id: int = 0
     chart_infos: List[NcChartInfo] = field(default_factory=list)
     source_file: Optional[str] = None
-
-
-diff_type_mapping = {
-        'easy': DifficultyType.EASY,
-        'normal': DifficultyType.NORMAL,
-        'hard': DifficultyType.HARD,
-        'extreme': DifficultyType.EXTREME,
-        'extra_extreme': DifficultyType.EXTRA_EXTREME,
-        'ex_extreme': DifficultyType.EXTRA_EXTREME,
-        'extraextreme': DifficultyType.EXTRA_EXTREME,
-        'exextreme': DifficultyType.EXTRA_EXTREME,
-    }
-
-nc_diff_type_mapping = {
-                'easy': DifficultyType.EASY,
-                'normal': DifficultyType.NORMAL,
-                'hard': DifficultyType.HARD,
-                'extreme': DifficultyType.EXTREME,
-                'ex_extreme': DifficultyType.EXTRA_EXTREME,
-            }
-
-def parse_difficulty_type(name: str):
-    """Parse difficulty type name to enum."""
-    return diff_type_mapping.get(name.lower())
