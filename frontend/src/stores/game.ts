@@ -3,6 +3,7 @@ import { ref, computed } from 'vue'
 import { gameApi } from '@/api'
 import type { GameStatus, GameStatusDisplay, SwitchSongRequest } from '@/types'
 import { ElMessage } from 'element-plus'
+import i18n from '@/locales'
 
 export const useGameStore = defineStore('game', () => {
   // State
@@ -77,7 +78,7 @@ export const useGameStore = defineStore('game', () => {
 
       return result
     } catch (err) {
-      ElMessage.error('Failed to switch song')
+      ElMessage.error(i18n.global.t('messages.switchFailed'))
       return null
     } finally {
       switching.value = false
@@ -119,6 +120,25 @@ export const useGameStore = defineStore('game', () => {
     }
   }
 
+  async function reattachProcess() {
+    loading.value = true
+    try {
+      const response = await gameApi.reattach()
+      if (response.data.data.attached) {
+        ElMessage.success(i18n.global.t('messages.reattachSuccess'))
+        await refreshStatus()  // 刷新状态
+      } else {
+        ElMessage.error(i18n.global.t('messages.reattachFailedNoGame'))
+      }
+      return response.data.data.attached
+    } catch (err) {
+      ElMessage.error(i18n.global.t('messages.reattachFailed'))
+      return false
+    } finally {
+      loading.value = false
+    }
+  }
+
   return {
     status,
     switching,
@@ -135,5 +155,6 @@ export const useGameStore = defineStore('game', () => {
     stopAutoRefresh,
     setAutoRefresh,
     setRefreshInterval,
+    reattachProcess,
   }
 })

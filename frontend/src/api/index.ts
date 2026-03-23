@@ -91,6 +91,9 @@ export const gameApi = {
 
   // Get current song
   getCurrent: () => api.get<ApiResponse<{ songId?: number; sortId?: number; difficulty?: number; difficultyName?: string; songName?: string }>>('/game/current'),
+
+  // Reattach to game process
+  reattach: () => api.post<ApiResponse<{ attached: boolean }>>('/game/reattach'),
 }
 
 // Alias API

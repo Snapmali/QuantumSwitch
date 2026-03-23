@@ -194,3 +194,20 @@ async def get_current_song():
     except Exception as e:
         logger.error(f"Failed to get current song: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/reattach", response_model=ApiResponse[dict])
+async def reattach_process():
+    """Detach and reattach to the game process."""
+    try:
+        gsp = get_game_status_processor()
+        success = gsp.reattach()
+        # Return success=True even if attach failed (game not running is not an error)
+        return ApiResponse(
+            success=True,
+            data={"attached": success},
+            error=None
+        )
+    except Exception as e:
+        logger.error(f"Failed to reattach process: {e}")
+        raise HTTPException(status_code=500, detail=str(e))

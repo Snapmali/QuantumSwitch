@@ -22,6 +22,16 @@ class GameStatusProcessor:
         else:
             return None
 
+    def reattach(self) -> bool:
+        """
+        Detach from current process and reattach.
+
+        Returns:
+            True if successfully reattached, False otherwise
+        """
+        self._pm.detach()  # 先断开现有连接
+        return self._pm.attach()  # 重新连接
+
     def get_game_state(self) -> Optional[GameState]:
         """
         Read the current game state.

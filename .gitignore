@@ -1,7 +1,9 @@
 /.claude/
 /.idea/
+/.venv/
 /backend/build/
 /backend/dist/
 /backend/logs/
-/frontend/node_modules/
 /backend/test/
+/frontend/dist/
+/frontend/node_modules/

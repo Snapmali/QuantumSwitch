@@ -36,6 +36,7 @@ const emit = defineEmits<{
   selectAlias: [item: SongAliasMatchItem]
   selectMod: [item: ModInfoSearchItem]
   searchMods: [query: string]
+  clearSearch: []
 }>()
 
 const searchQuery = ref('')
@@ -55,10 +56,16 @@ const favoritesOnlyLocal = computed({
 const searchModeLocal = computed({
   get: () => props.searchMode || 'song',
   set: (val) => {
+    // Skip if refreshing (parent will handle the reload)
+    if (isRefreshing.value) {
+      return
+    }
+    // Set flag to prevent watcher from triggering search
+    isSwitchingMode.value = true
     emit('update:searchMode', val)
     // Clear search query when switching modes
+    // Note: don't emit search event here, parent component's setSearchMode will handle loading
     searchQuery.value = ''
-    emit('search', '')
   }
 })
 
@@ -96,6 +103,16 @@ watch(searchQuery, (newValue) => {
     isSelectingFromDropdown.value = false
     return
   }
+  // Skip search if switching search mode (parent will handle the search)
+  if (isSwitchingMode.value) {
+    isSwitchingMode.value = false
+    return
+  }
+  // Skip search if refreshing (parent will handle the search via reload)
+  if (isRefreshing.value) {
+    // 不清除标志，让 handleRefresh 来清除
+    return
+  }
   if (searchModeLocal.value === 'mod') {
     debouncedModSearch(newValue)
   } else {
@@ -116,7 +133,19 @@ const handleSelect = (song: Song) => {
 }
 
 const handleRefresh = () => {
+  // Set flag to prevent search mode setter and search query watcher from triggering search
+  isRefreshing.value = true
+  // 取消待执行的 debounced 搜索，防止之前的输入触发搜索
+  debouncedSearch.cancel()
+  debouncedModSearch.cancel()
+  // 清空搜索框
+  searchQuery.value = ''
+  // 触发刷新事件（父组件的 reloadSongs 会处理所有状态重置和歌曲加载）
   emit('refresh')
+  // 延迟清除标志（确保在父组件处理期间标志仍然有效）
+  setTimeout(() => {
+    isRefreshing.value = false
+  }, 100)
 }
 
 const handleToggleFavorite = (e: Event, songId: number) => {
@@ -136,6 +165,10 @@ const dropdownSelectedIndex = ref(-1)
 const isDropdownHiddenByEsc = ref(false)
 // Flag to prevent search when selecting from dropdown
 const isSelectingFromDropdown = ref(false)
+// Flag to prevent search when switching search mode
+const isSwitchingMode = ref(false)
+// Flag to prevent search when refreshing
+const isRefreshing = ref(false)
 
 const showDropdown = computed(() => {
   if (isDropdownHiddenByEsc.value || !isSearchFocused.value || searchQuery.value.length === 0) {

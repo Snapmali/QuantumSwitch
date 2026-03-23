@@ -186,6 +186,8 @@ class MemoryOperator:
                 logger.error(f"Failed to calculate address: {e}")
                 return None
 
+        logger.debug(f"ReadProcessMemory: 0x{actual_address:08X} size={size}")
+
         kernel32 = ctypes.windll.kernel32
         buffer = ctypes.create_string_buffer(size)
         bytes_read = ctypes.c_size_t(0)
@@ -251,6 +253,8 @@ class MemoryOperator:
             except RuntimeError as e:
                 logger.error(f"Failed to calculate address: {e}")
                 return False
+
+        logger.debug(f"VirtualProtectEx: 0x{actual_address:08X}")
 
         kernel32 = ctypes.windll.kernel32
         buffer = ctypes.create_string_buffer(data)
@@ -321,7 +325,8 @@ class MemoryOperator:
             dll: If specified, address is treated as an offset from this DLL's base
             dll_pattern_offset: If specified, address is calculated from pattern base + offset
         """
-        logger.debug(f"Reading int from address: 0x{address:08X}, size={size}, dll={dll}")
+        logger.debug(f"Reading int from address: 0x{address:08X}, size={size}, use_offset={use_offset}, "
+                     f"dll={dll}, dll_pattern_offset={dll_pattern_offset}")
 
         data = self.read_memory(
             address, size,
@@ -332,7 +337,9 @@ class MemoryOperator:
         )
         if data is None:
             return None
-        return int.from_bytes(data, byteorder='little', signed=signed)
+        result = int.from_bytes(data, byteorder='little', signed=signed)
+        logger.debug(f"Read int succeed, value: 0x{result:08X}")
+        return result
 
     def write_int(
             self,
@@ -358,13 +365,17 @@ class MemoryOperator:
             dll: If specified, address is treated as an offset from this DLL's base
             dll_pattern_offset: If specified, address is calculated from pattern base + offset
         """
-        logger.debug(f"Writing int to address: 0x{address:08X}, value={value}, size={size}, dll={dll}")
+        logger.debug(f"Writing int to address: 0x{address:08X}, value={value}, size={size}, use_offset={use_offset}, "
+                     f"dll={dll}, dll_pattern_offset={dll_pattern_offset}")
 
         data = value.to_bytes(size, byteorder='little', signed=signed)
-        return self.write_memory(
+        result = self.write_memory(
             address, data,
             use_offset=use_offset,
             apply_eden=apply_eden,
             dll=dll,
             dll_pattern_offset=dll_pattern_offset
         )
+        if result:
+            logger.debug(f"Write int succeed")
+        return result

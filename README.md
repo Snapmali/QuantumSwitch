@@ -125,11 +125,9 @@ cd ..\frontend
 npm install
 ```
 
----
+### 5. 启动方式
 
-## 使用方式
-
-### 开发模式（前后端分离）
+#### 开发模式（前后端分离）
 
 适合开发和调试，前端和后端分别运行。
 
@@ -148,7 +146,7 @@ npm run dev
 
 访问 http://localhost:5173 使用工具。
 
-### 生产模式（单服务）
+#### 生产模式（单服务）
 
 适合日常使用，只需运行后端，前端页面由后端直接提供。
 
@@ -167,37 +165,70 @@ python start.py
 
 访问 http://localhost:8000 使用工具。
 
----
+### 6. 构建可执行文件
 
-## 构建独立可执行文件
-
-### 准备工作
+#### 准备工作
 
 确保已安装：
 - Python 3.11+ 和 pip
 - Node.js 18+
-- PyInstaller (`pip install pyinstaller`)
 
-### 构建
+#### 构建步骤
 
-项目提供了自动构建脚本：
+项目根目录提供了自动构建脚本 `build.bat`：
 
 ```bash
 build.bat
 ```
 
+构建流程说明：
+1. **前端构建**：自动安装依赖（如需要）并执行 `npm run build`
+2. **环境准备**：自动创建虚拟环境并安装依赖
+3. **PyInstaller 打包**：使用 `build.spec` 配置打包后端
+4. **资源复制**：复制前端构建产物、配置文件模板、数据文件等
+
 构建完成后，输出目录为 `backend/dist/QuantumSwitch/`，包含：
 
 ```
 QuantumSwitch/
-├── QuantumSwitch.exe    # 主程序
+├── QuantumSwitch.exe      # 主程序
 ├── config/
-│   └── .env.template    # 配置文件模板
-├── frontend/dist/       # 前端资源
-└── icon.ico             # 程序图标
+│   └── .env.template      # 配置文件模板
+├── data/                  # 数据文件（别名、收藏等）
+│   ├── vanilla/           # 原版游戏数据文件目录
+│   ├── aliases.json
+│   └── favorites.json
+├── frontend/dist/         # 前端构建资源
+├── logs/                  # 日志目录
+└── icon.ico               # 程序图标
 ```
 
 将 `QuantumSwitch` 文件夹复制到目标电脑即可部署使用。详见上方【使用已构建版本】章节。
+
+#### 手动构建（备选）
+
+如需手动构建：
+
+```bash
+# 1. 构建前端
+cd frontend
+npm install
+npm run build
+cd ..
+
+# 2. 准备后端环境
+cd backend
+python -m venv .venv
+.venv\Scripts\activate
+pip install -r requirements.txt
+pip install pyinstaller
+
+# 3. 打包
+python -m PyInstaller build.spec
+
+# 4. 复制资源到 dist/QuantumSwitch/
+# （参见 build.bat 中的资源复制步骤）
+```
 
 ---
 
@@ -272,36 +303,86 @@ QuantumSwitch/
 
 ```
 QuantumSwitch/
-├── backend/                  # FastAPI 后端
+├── backend/                          # FastAPI 后端
 │   ├── app/
-│   │   ├── api/             # API 路由层
-│   │   │   ├── songs.py     # 歌曲列表、搜索、分页
-│   │   │   ├── game.py      # 游戏状态、歌曲切换
-│   │   │   └── system.py    # 健康检查、配置
-│   │   ├── core/            # 核心业务逻辑
-│   │   │   ├── process_manager.py    # 进程管理
+│   │   ├── api/                      # API 路由层
+│   │   │   ├── __init__.py
+│   │   │   ├── songs.py              # 歌曲列表、搜索、分页
+│   │   │   └── game.py               # 游戏状态、歌曲切换
+│   │   ├── core/                     # 核心业务逻辑
+│   │   │   ├── __init__.py
+│   │   │   ├── process_manager.py    # 游戏进程查找与附加
 │   │   │   ├── memory_operator.py    # 内存读写操作
 │   │   │   ├── song_selector.py      # 歌曲切换逻辑
-│   │   │   └── pvdb_parser.py        # Mod 数据库解析
-│   │   ├── models/          # 数据模型
-│   │   │   ├── song.py      # 歌曲、难度相关模型
-│   │   │   └── schemas.py   # API 请求/响应模型
-│   │   └── utils/           # 工具函数
-│   ├── .env                 # 配置文件（需手动创建）
-│   ├── requirements.txt     # Python 依赖
-│   └── start.py            # 启动入口
+│   │   │   ├── pvdb_parser.py        # Mod 数据库解析
+│   │   │   ├── alias_manager.py      # 歌曲别名管理
+│   │   │   ├── favorites_manager.py  # 收藏管理
+│   │   │   ├── game_dir_processor.py # 游戏目录处理
+│   │   │   ├── game_status_processor.py  # 游戏状态处理
+│   │   │   ├── bootstrap.py          # 启动初始化
+│   │   │   └── container.py          # 依赖注入容器
+│   │   ├── models/                   # 数据模型
+│   │   │   ├── __init__.py
+│   │   │   ├── song.py               # 歌曲、难度相关模型
+│   │   │   ├── schemas.py            # API 请求/响应模型
+│   │   │   ├── chart.py              # 谱面模型
+│   │   │   ├── difficulty_type.py    # 难度类型定义
+│   │   │   ├── game_state.py         # 游戏状态模型
+│   │   │   ├── mod_info.py           # Mod 信息模型
+│   │   │   └── process_module.py     # 进程模块模型
+│   │   ├── utils/                    # 工具函数
+│   │   │   ├── __init__.py
+│   │   │   └── logger.py             # 日志配置
+│   │   ├── config.py                 # 应用配置
+│   │   └── main.py                   # FastAPI 应用入口
+│   ├── data/                         # 数据文件目录
+│   │   ├── vanilla/                  # 原版游戏数据文件目录
+│   │   ├── aliases.json
+│   │   └── favorites.json
+│   ├── .env                          # 配置文件（需手动创建）
+│   ├── .env.template                 # 配置模板
+│   ├── requirements.txt              # Python 依赖
+│   ├── build.spec                    # PyInstaller 构建配置
+│   ├── build_entry.py                # 打包入口
+│   └── start.py                      # 开发启动入口
 │
-├── frontend/                # Vue 3 前端
+├── frontend/                         # Vue 3 前端
 │   ├── src/
-│   │   ├── api/            # Axios API 客户端
-│   │   ├── components/     # Vue 组件
-│   │   ├── stores/         # Pinia 状态管理
-│   │   ├── views/          # 页面级组件
-│   │   └── types/          # TypeScript 类型定义
-│   ├── package.json        # Node.js 依赖
-│   └── vite.config.ts      # Vite 配置
+│   │   ├── api/
+│   │   │   └── index.ts              # Axios API 客户端
+│   │   ├── components/               # Vue 组件
+│   │   │   ├── SongList.vue          # 歌曲列表组件
+│   │   │   ├── SongDetail.vue        # 歌曲详情组件
+│   │   │   ├── GameStatus.vue        # 游戏状态组件
+│   │   │   ├── AliasManager.vue      # 别名管理组件
+│   │   │   ├── LanguageSwitch.vue    # 语言切换组件
+│   │   │   ├── SearchAliasDropdown.vue   # 别名搜索下拉
+│   │   │   ├── SearchModDropdown.vue     # Mod搜索下拉
+│   │   │   └── WarningDialog.vue     # 警告对话框
+│   │   ├── locales/                  # 国际化文件
+│   │   │   ├── index.ts
+│   │   │   ├── zh-CN.ts              # 简体中文
+│   │   │   └── en-US.ts              # 英文
+│   │   ├── router/
+│   │   │   └── index.ts              # Vue Router 配置
+│   │   ├── stores/                   # Pinia 状态管理
+│   │   │   ├── songs.ts              # 歌曲状态
+│   │   │   ├── game.ts               # 游戏状态
+│   │   │   └── locale.ts             # 语言状态
+│   │   ├── types/
+│   │   │   └── index.ts              # TypeScript 类型定义
+│   │   ├── views/
+│   │   │   └── HomeView.vue          # 主页面
+│   │   ├── App.vue                   # 根组件
+│   │   └── main.ts                   # 入口文件
+│   ├── public/
+│   ├── package.json                  # Node.js 依赖
+│   ├── vite.config.ts                # Vite 配置
+│   └── tsconfig.json                 # TypeScript 配置
 │
-└── README.md
+├── build.bat                         # Windows 构建脚本
+├── icon.png                          # 应用图标
+└── README.md                         # 项目说明
 ```
 
 ## API 文档
@@ -316,10 +397,11 @@ QuantumSwitch/
 - `POST /api/game/switch` - 执行歌曲切换
 
 所有 API 响应遵循统一格式：
+
 ```json
 {
   "success": true,
-  "data": { ... },
+  "data": null,
   "error": null
 }
 ```

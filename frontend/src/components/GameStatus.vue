@@ -2,7 +2,7 @@
 import type { GameStatusDisplay } from '@/types'
 import { useI18n } from 'vue-i18n'
 import { getDifficultyShortLabel, getDifficultyStyle, getDifficultyDisabledStyle, getChartStyleDisplayName } from '@/types'
-import { Refresh, VideoPlay } from '@element-plus/icons-vue'
+import { Refresh, VideoPlay, Link } from '@element-plus/icons-vue'
 
 const { t } = useI18n()
 
@@ -17,11 +17,16 @@ const emit = defineEmits<{
   'update:autoRefresh': [value: boolean]
   'update:refreshInterval': [value: number]
   'refresh': []
+  'reattach': []
   'song-click': [songId: number]  // 新增：点击当前歌曲
 }>()
 
 const handleRefresh = () => {
   emit('refresh')
+}
+
+const handleReattach = () => {
+  emit('reattach')
 }
 
 const getStatusType = (status: string): string => {
@@ -116,6 +121,15 @@ const handleSongClick = () => {
               :title="t('gameStatus.refreshNow')"
             >
               <el-icon :class="{ 'is-spinning': loading }"><refresh /></el-icon>
+            </el-button>
+            <el-button
+              circle
+              size="small"
+              :disabled="loading"
+              @click="handleReattach"
+              :title="t('gameStatus.reattach')"
+            >
+              <el-icon><Link /></el-icon>
             </el-button>
           </div>
         </div>

@@ -102,6 +102,8 @@ class SongSelector:
         if actual_difficulty != difficulty:
             logger.info(f"Difficulty '{difficulty.display_name}' not available, using '{actual_difficulty.display_name}' instead")
 
+        logger.info(f"Switching to '{song.name}' ({style} {actual_difficulty.display_name}), {mode.name} mode")
+
         # Execute the appropriate switch method
         if mode == SwitchMode.STANDARD:
             success = self._execute_standard_switch(song, actual_difficulty, style)
@@ -109,7 +111,7 @@ class SongSelector:
             success = self._execute_delayed_switch(song, actual_difficulty, style)
 
         if success:
-            message = f"Successfully switched to '{song.name}' ({actual_difficulty.display_name})"
+            message = f"Successfully switched to '{song.name}' ({style} {actual_difficulty.display_name})"
             if mode == SwitchMode.DELAYED:
                 message += " (delayed update)"
         else:
@@ -124,77 +126,42 @@ class SongSelector:
         According to technical specification (Section 5.2):
         - Step 4: Initialize switch (GAME_STATE_NEXT = 6, START_CHANGE = 2)
         - Step 5: Wait 100ms
-        - Step 6: Prepare data (write DIFF_TYPE, PVID)
+        - Step 6: Set chart data (write DIFF_TYPE, PVID)
         - Step 7: Set sort (write SORT = 1, DIFF_LEVEL = 19)
         - Step 8: Trigger switch (GAME_STATE_NEXT = 5, START_CHANGE = 2)
         """
         try:
             # Step 4: Initialize switch
-            logger.debug("Step 4: Initialize switch")
-            # Write GAME_STATE_NEXT = 6 (switch to Custom playlists)
-            if not self._mem.write_int(settings.GAME_STATE_NEXT_ADDR, 6):
-                logger.error("Failed to set GAME_STATE_NEXT = 6")
-                return False
-
-            # Write START_CHANGE = 2 (triggering menu switch)
-            if not self._mem.write_int(settings.START_CHANGE_ADDR, 2):
-                logger.error("Failed to set START_CHANGE = 2")
+            logger.debug("[Step 4] Initialize switch")
+            result = self._set_pv_mode()
+            if not result:
                 return False
 
             # Step 5: Wait 100ms for stabilization
-            logger.debug("Step 5: Wait 100ms")
+            logger.debug("[Step 5] Wait 100ms")
             time.sleep(0.1)  # 100ms per specification
 
-            # Step 6: Prepare data (selectPV)
-            logger.debug("Step 6: Prepare song data")
-            # Write difficulty type first (per spec order)
-            if not self._mem.write_int(settings.LAST_SELECT_DIFF_TYPE_ADDR, difficulty.value, apply_eden=True):
-                logger.error("Failed to write DIFF_TYPE")
+            # Step 6: Set chart data (selectPV)
+            logger.debug("[Step 6] Set chart data")
+            result = self._set_chart_data(song, difficulty, style)
+            if not result:
                 return False
-
-            # Write PVID (song ID)
-            if not self._mem.write_int(settings.LAST_SELECT_PVID_ADDR, song.id, apply_eden=True):
-                logger.error("Failed to write PVID")
-                return False
-
-            if self._mem.get_cached_dll_base(DllEnum.NEW_CLASSICS):
-                # Set chart style (Arcade / Console / Mixed)
-                style_offset = self._mem.read_int(0, dll_pattern_offset=DllPatternOffset.CHART_STYLE_OFFSET)
-                if not self._mem.write_int(
-                        style_offset + 4,
-                        ChartStyleValue.to_value(style),
-                        dll_pattern_offset=DllPatternOffset.CHART_STYLE_OFFSET
-                ):
-                    logger.error("Failed to write CHART_STYLE")
-                    return False
 
             # Step 7: Set sort (selectSort)
-            logger.debug("Step 7: Set sort")
-            # Write LAST_SELECT_SORT_ADDR = 1 (sort by difficulty level)
-            if not self._mem.write_int(settings.LAST_SELECT_SORT_ADDR, 1, apply_eden=True):
-                logger.error("Failed to write SORT")
-                return False
-
-            # Write LAST_SELECT_DIFF_LEVEL_ADDR = 19 (difficulty level = ALL)
-            if not self._mem.write_int(settings.LAST_SELECT_DIFF_LEVEL_ADDR, 19, apply_eden=True):
-                logger.error("Failed to write DIFF_LEVEL")
+            logger.debug("[Step 7] Set sort")
+            result = self._set_sort_data()
+            if not result:
                 return False
 
             # Step 8: Trigger switch
-            logger.debug("Step 8: Trigger switch")
-            # Write GAME_STATE_NEXT = 5 (switch to Rhythm Game)
-            if not self._mem.write_int(settings.GAME_STATE_NEXT_ADDR, 5):
-                logger.error("Failed to set GAME_STATE_NEXT = 5")
-                return False
-
-            # Write START_CHANGE = 2 (triggering menu switch)
-            if not self._mem.write_int(settings.START_CHANGE_ADDR, 2):
-                logger.error("Failed to set START_CHANGE = 2")
+            logger.debug("[Step 8] Trigger switch")
+            result = self._set_selection_mode()
+            if not result:
                 return False
 
             logger.info(
                 f"Standard switch executed for song {song.id} ({song.name}) "
-                f"with difficulty {difficulty.display_name}"
+                f"with difficulty {difficulty.display_name} and style {style.name}"
             )
             return True
 
@@ -214,38 +181,16 @@ class SongSelector:
         """
         try:
             # Step 1-2: Establish connection and detect version (done by caller)
-
-            # Step 3: Update data only (selectPV + selectSort)
-            logger.debug("Delayed mode: Updating data only")
-
+            # Step 3-4: Update data only (selectPV + selectSort)
             # selectPV: Write difficulty type first, then PVID (per spec section 5.2 step 6)
-            if not self._mem.write_int(settings.LAST_SELECT_DIFF_TYPE_ADDR, difficulty.value, apply_eden=True):
-                logger.error("Delayed mode: Failed to write DIFF_TYPE")
+            logger.debug("[Step 3] Set chart data (Delayed mode)")
+            result = self._set_chart_data(song, difficulty, style)
+            if not result:
                 return False
 
-            if not self._mem.write_int(settings.LAST_SELECT_PVID_ADDR, song.id, apply_eden=True):
-                logger.error("Delayed mode: Failed to write PVID")
-                return False
-
-            if self._mem.get_cached_dll_base(DllEnum.NEW_CLASSICS):
-                # Set chart style (Arcade / Console / Mixed)
-                style_offset = self._mem.read_int(0, dll_pattern_offset=DllPatternOffset.CHART_STYLE_OFFSET)
-                if not self._mem.write_int(
-                        style_offset + 4,
-                        ChartStyleValue.to_value(style),
-                        dll_pattern_offset=DllPatternOffset.CHART_STYLE_OFFSET
-                ):
-                    logger.error("Failed to write CHART_STYLE")
-                    return False
-
-            # Write LAST_SELECT_SORT_ADDR = 1 (sort by difficulty level)
-            if not self._mem.write_int(settings.LAST_SELECT_SORT_ADDR, 1, apply_eden=True):
-                logger.error("Delayed mode: Failed to write SORT")
-                return False
-
-            # Write LAST_SELECT_DIFF_LEVEL_ADDR = 19 (difficulty level = ALL)
-            if not self._mem.write_int(settings.LAST_SELECT_DIFF_LEVEL_ADDR, 19, apply_eden=True):
-                logger.error("Delayed mode: Failed to write DIFF_LEVEL")
+            logger.debug("[Step 4] Set sort (Delayed mode)")
+            result = self._set_sort_data()
+            if not result:
                 return False
 
             # Note: We don't trigger GAME_STATE_NEXT or START_CHANGE here
@@ -253,10 +198,74 @@ class SongSelector:
 
             logger.info(
                 f"Delayed switch prepared for song {song.id} ({song.name}) "
-                f"with difficulty {difficulty.display_name}"
+                f"with difficulty {difficulty.display_name} and style {style.name}"
             )
             return True
 
         except Exception as e:
             logger.exception(f"Error during delayed switch: {e}")
             return False
+
+    def _set_pv_mode(self) -> bool:
+        # Write GAME_STATE_NEXT = 6 (switch to Custom playlists)
+        if not self._mem.write_int(settings.GAME_STATE_NEXT_ADDR, 6):
+            logger.error("Failed to set GAME_STATE_NEXT = 6")
+            return False
+
+        # Write START_CHANGE = 2 (triggering menu switch)
+        if not self._mem.write_int(settings.START_CHANGE_ADDR, 2):
+            logger.error("Failed to set START_CHANGE = 2")
+            return False
+        return True
+
+    def _set_chart_data(self, song: Song, difficulty: DifficultyType, style: ChartStyle = ChartStyle.ARCADE) -> bool:
+        # Write difficulty type first (per spec order)
+        if not self._mem.write_int(settings.LAST_SELECT_DIFF_TYPE_ADDR, difficulty.value, apply_eden=True):
+            logger.error("Failed to write DIFF_TYPE")
+            return False
+
+        # Write PVID (song ID)
+        if not self._mem.write_int(settings.LAST_SELECT_PVID_ADDR, song.id, apply_eden=True):
+            logger.error("Failed to write PVID")
+            return False
+
+        if self._mem.get_cached_dll_base(DllEnum.NEW_CLASSICS):
+            # Set chart style (Arcade / Console / Mixed)
+            logger.debug("[ChartStyle] Set chart style")
+            style_offset = self._mem.read_int(0, dll_pattern_offset=DllPatternOffset.CHART_STYLE_OFFSET)
+            if not self._mem.write_int(
+                    style_offset + 4,
+                    ChartStyleValue.to_value(style),
+                    dll_pattern_offset=DllPatternOffset.CHART_STYLE_OFFSET
+            ):
+                logger.error("Failed to write CHART_STYLE")
+                return False
+        else:
+            logger.debug("Skip setting chart style")
+        return True
+
+    def _set_sort_data(self) -> bool:
+        # Write LAST_SELECT_SORT_ADDR = 1 (sort by difficulty level)
+        if not self._mem.write_int(settings.LAST_SELECT_SORT_ADDR, 1, apply_eden=True):
+            logger.error("Failed to write SORT")
+            return False
+
+        # Write LAST_SELECT_DIFF_LEVEL_ADDR = 19 (difficulty level = ALL)
+        if not self._mem.write_int(settings.LAST_SELECT_DIFF_LEVEL_ADDR, 19, apply_eden=True):
+            logger.error("Failed to write DIFF_LEVEL")
+            return False
+        return True
+
+    def _set_selection_mode(self) -> bool:
+        # Write GAME_STATE_NEXT = 5 (switch to Rhythm Game)
+        if not self._mem.write_int(settings.GAME_STATE_NEXT_ADDR, 5):
+            logger.error("Failed to set GAME_STATE_NEXT = 5")
+            return False
+
+        # Write START_CHANGE = 2 (triggering menu switch)
+        if not self._mem.write_int(settings.START_CHANGE_ADDR, 2):
+            logger.error("Failed to set START_CHANGE = 2")
+            return False
+        return True
+
+

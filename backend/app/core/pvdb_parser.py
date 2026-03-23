@@ -228,6 +228,9 @@ class PvdbParser:
         self._songs.sort(key=lambda s: s.id)
 
         # 处理 NC 数据库歌曲，将 NC 难度信息合并到对应歌曲中
+        # 如果 nc_db 中某个歌曲 id 的谱面与相同 mod id 的 pv_db 中该歌曲某个谱面的 难度类别、script_file_name 一致，
+        # 则 pv_db 中该谱面的 chart style 被 nc_db 的谱面覆盖
+        # 否则将该 nc_db 谱面视为新谱面加入到歌曲
         # Process NC database songs, merge NC difficulty info into corresponding songs
         for song_id, nc_list in self._nc_songs.items():
             song = self._song_map.get(song_id)
@@ -243,6 +246,7 @@ class PvdbParser:
             # 遍历该歌曲的所有 NC 条目
             # Iterate through all NC entries for this song
             for nc_song in nc_list:
+                # 向歌曲补充 nc_db 中额外的 mod info
                 # Merge mod info
                 if nc_song.mod_info and nc_song.mod_info not in song.mod_infos:
                     song.mod_infos.append(nc_song.mod_info)
@@ -252,19 +256,23 @@ class PvdbParser:
                 # 建立 (difficulty_type, script_file_name) -> ChartInfo 的映射
                 # Build (difficulty_type, script_file_name) -> ChartInfo lookup
                 chart_lookup: Dict[Tuple[DifficultyType, Optional[str]], ChartInfo] = {
-                    (chart.type, chart.script_file_name): chart
-                    for chart in mod_charts
+                    (mod_chart.type, mod_chart.script_file_name): mod_chart
+                    for mod_chart in mod_charts
                 }
+
+                nc_styles: Set[ChartStyle] = set()
 
                 # 处理 NC 数据库中的每个难度
                 # Process each difficulty from NC database
                 for nc_chart in nc_song.chart_infos:
+                    nc_styles.add(nc_chart.style)
+                    # 如果 nc_db 谱面的 script_file_name 为空，则跳过该谱面
                     if not nc_chart.script_file_name:
                         continue
 
                     key = (nc_chart.difficulty_type, nc_chart.script_file_name)
                     if key in chart_lookup:
-                        # 更新已有谱面的风格
+                        # 更新相同 mod_id、难度信息、script_file_name 谱面的风格
                         # Update existing chart style
                         chart_lookup[key].style = nc_chart.style
                     else:
@@ -282,6 +290,13 @@ class PvdbParser:
                         # 同步更新查找表
                         # Update lookup table
                         chart_lookup[key] = new_chart
+
+                # 删除 chart style 在 nc_db 中未定义的谱面
+                for mod_chart in mod_charts:
+                    if mod_chart.style not in nc_styles:
+                        song.chart_infos.remove(mod_chart)
+
+            song.difficulties = [c.type for c in song.chart_infos]
 
         logger.info(f"Total songs loaded: {len(self._songs)}")
         return self._songs

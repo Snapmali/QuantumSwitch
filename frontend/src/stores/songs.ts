@@ -3,6 +3,7 @@ import { ref, computed } from 'vue'
 import { songApi, gameApi, modApi } from '@/api'
 import type { Song, SongListResponse, FilterOptions, DifficultyType, SongAliasMatchItem, ModInfoSearchItem } from '@/types'
 import { ElMessage } from 'element-plus'
+import i18n from '@/locales'
 
 export const useSongStore = defineStore('songs', () => {
   // State
@@ -141,10 +142,19 @@ export const useSongStore = defineStore('songs', () => {
         }
       })
 
-      ElMessage.success(`歌曲列表已刷新，共 ${data.total} 首歌曲`)
+      // 重置搜索相关状态
+      searchQuery.value = ''
+      searchMode.value = 'song'
+      selectedModId.value = null
+      matchedMods.value = []
+      matchedAliases.value = []
+      favoritesOnly.value = false
+      filterOptions.value.favoritesOnly = false
+
+      ElMessage.success(i18n.global.t('messages.songsRefreshedCount', { count: data.total }))
     } catch (err) {
       error.value = err instanceof Error ? err.message : 'Failed to reload songs'
-      ElMessage.error('刷新歌曲列表失败')
+      ElMessage.error(i18n.global.t('messages.songsRefreshFailed'))
     } finally {
       reloading.value = false
     }
@@ -280,7 +290,7 @@ export const useSongStore = defineStore('songs', () => {
 
   async function switchToCurrentSong() {
     if (!selectedId.value || selectedDifficultyType.value === null) {
-      ElMessage.warning('请先选择歌曲和难度')
+      ElMessage.warning(i18n.global.t('messages.selectSongAndDifficulty'))
       return false
     }
 

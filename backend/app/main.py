@@ -1,10 +1,11 @@
 """Main FastAPI application entry point."""
 import socket
 import sys
+import time
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
@@ -157,6 +158,29 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+@app.middleware("http")
+async def log_requests(request: Request, call_next):
+    """Log HTTP requests and responses."""
+    start_time = time.time()
+
+    # Log incoming request
+    logger.info(f"Request: {request.method} {request.url.path}")
+
+    response = await call_next(request)
+
+    # Calculate duration
+    duration = time.time() - start_time
+
+    # Log response
+    logger.info(
+        f"Response: {request.method} {request.url.path} - "
+        f"Status: {response.status_code} - Duration: {duration:.3f}s"
+    )
+
+    return response
+
 
 # Include API routers
 app.include_router(songs.router, prefix="/api")

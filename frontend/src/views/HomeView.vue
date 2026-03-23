@@ -115,6 +115,26 @@ const handlePageChange = (page: number) => {
 const handleRefreshSongs = async () => {
   await songStore.reloadSongs()
   currentPage.value = 1
+
+  // 如果有选中的歌曲，重新获取详情以更新信息
+  if (songStore.selectedId) {
+    try {
+      const response = await songApi.getById(songStore.selectedId)
+      if (response.data.data) {
+        // 更新选中的歌曲数据
+        selectedSongData.value = response.data.data
+      } else {
+        // 歌曲不存在，清空选中状态
+        selectedSongData.value = null
+        songStore.selectedId = null
+      }
+    } catch (err) {
+      // API 调用失败（如歌曲不存在），隐藏详情组件
+      selectedSongData.value = null
+      songStore.selectedId = null
+    }
+  }
+
   ElMessage.success(t('messages.songsRefreshed'))
 }
 
@@ -147,6 +167,10 @@ const handleSearchMods = async (query: string) => {
 
 const handleSelectMod = async (mod: { id: number; name: string }) => {
   await songStore.selectMod(mod.id, mod.name)
+}
+
+const handleReattachProcess = async () => {
+  await gameStore.reattachProcess()
 }
 
 const handleCurrentSongClick = async (songId: number) => {
@@ -205,6 +229,7 @@ const handleCurrentSongClick = async (songId: number) => {
             v-model:auto-refresh="gameStore.autoRefresh"
             v-model:refresh-interval="refreshIntervalSeconds"
             @refresh="gameStore.refreshStatus"
+            @reattach="handleReattachProcess"
             @song-click="handleCurrentSongClick"
           />
           <el-card shadow="never" class="song-list-card">
