@@ -4,6 +4,7 @@ import uuid
 from pathlib import Path
 from typing import Dict, List, Optional
 
+from ..config import DATA_DIR
 from ..models import SongAlias
 from ..utils.logger import logger
 
@@ -11,13 +12,9 @@ from ..utils.logger import logger
 class AliasManager:
     """Manages song aliases persistence and fuzzy matching."""
 
-    def __init__(self, data_dir: str = "data"):
-        """Initialize alias manager.
-
-        Args:
-            data_dir: Directory to store aliases data file
-        """
-        self.data_dir = Path(data_dir)
+    def __init__(self):
+        """Initialize alias manager"""
+        self.data_dir = DATA_DIR
         self.alias_file = self.data_dir / "aliases.json"
         self._aliases: Dict[str, SongAlias] = {}  # key: id
         self._ensure_data_dir()

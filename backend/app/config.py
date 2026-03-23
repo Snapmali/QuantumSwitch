@@ -107,7 +107,7 @@ class Settings(BaseSettings):
     ]
 
     class Config:
-        env_file = CONFIG_DIR / ".env" if IS_FROZEN else ".env"
+        env_file = CONFIG_DIR / ".env"
         env_file_encoding = "utf-8"
 
 

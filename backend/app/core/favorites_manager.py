@@ -1,22 +1,17 @@
 """Favorites manager for handling song favorites persistence."""
 import json
-import os
-from pathlib import Path
 from typing import Set
 
+from ..config import DATA_DIR
 from ..utils.logger import logger
 
 
 class FavoritesManager:
-    """Manages favorite songs persistence."""
+    """Manages favorite songs' persistence."""
 
-    def __init__(self, data_dir: str = "data"):
-        """Initialize favorites manager.
-
-        Args:
-            data_dir: Directory to store favorites data file
-        """
-        self.data_dir = Path(data_dir)
+    def __init__(self):
+        """Initialize favorites manager"""
+        self.data_dir = DATA_DIR
         self.favorites_file = self.data_dir / "favorites.json"
         self._favorites: Set[int] = set()
         self._ensure_data_dir()

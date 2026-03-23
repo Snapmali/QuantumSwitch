@@ -88,13 +88,13 @@ def bootstrap_services() -> None:
     # 注册 AliasManager
     container.register_singleton(
         AliasManager,
-        lambda: AliasManager(data_dir="data")
+        lambda: AliasManager()
     )
 
     # 注册 FavoritesManager
     container.register_singleton(
         FavoritesManager,
-        lambda: FavoritesManager(data_dir="data")
+        lambda: FavoritesManager()
     )
 
     logger.info("Services bootstrapped successfully")

@@ -350,7 +350,7 @@ class ProcessManager:
                         pattern_cache={}
                     )
                     output[white] = module
-                    logger.debug(f"Cached DLL: {path} at 0x{hmodule:08X}")
+                    logger.info(f"Cached DLL: {path} at 0x{hmodule:08X}")
                     break
 
         return output

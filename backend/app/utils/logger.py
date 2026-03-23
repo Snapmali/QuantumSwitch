@@ -33,19 +33,23 @@ logger.add(
     level="DEBUG" if _get_debug_mode() else "INFO"
 )
 
-# Add file handler for persistent logs - use WORK_DIR for PyInstaller compatibility
-work_dir = _get_work_dir()
-log_dir = work_dir / "logs"
-log_dir.mkdir(exist_ok=True)
+# Add file handler only in main process (not in spawn/fork processes)
+# This avoids file locking issues on Windows during log rotation
+import multiprocessing
+if multiprocessing.parent_process() is None:
+    work_dir = _get_work_dir()
+    log_dir = work_dir / "logs"
+    log_dir.mkdir(exist_ok=True)
 
-logger.add(
-    log_dir / "app.log",
-    rotation="10 MB",
-    retention="7 days",
-    format="{time:YYYY-MM-DD HH:mm:ss} | {level: <8} | {name}:{function}:{line} - {message}",
-    level="DEBUG",
-    encoding="utf-8",
-    enqueue=True
-)
+    logger.add(
+        log_dir / "app.log",
+        rotation="10 MB",
+        retention="7 days",
+        format="{time:YYYY-MM-DD HH:mm:ss} | {level: <8} | {name}:{function}:{line} - {message}",
+        level="DEBUG",
+        encoding="utf-8",
+        enqueue=True,
+        delay=True  # Defer file opening until first log
+    )
 
 __all__ = ["logger"]

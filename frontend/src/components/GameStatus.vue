@@ -91,28 +91,45 @@ const handleSongClick = () => {
     emit('song-click', props.status.currentSongInfo.id)
   }
 }
+
+// 获取状态标签的显示配置（类型和文本）
+const resolveStatusDisplay = (status: GameStatusDisplay | null) => {
+  if (!status) {
+    return { type: 'info', text: t('common.unknown') }
+  }
+
+  if (status.status !== 'running') {
+    return { type: getStatusType(status.status), text: getStatusText(status.status) }
+  }
+
+  // 游戏运行中状态
+  const gameState = status.gameState
+  const isIngame = gameState === 'INGAME'
+  const isWarningState = ['UNKNOWN', 'NOT_READY', null, undefined, ''].includes(gameState)
+
+  return {
+    type: isIngame ? 'success' : isWarningState ? 'warning' : 'primary',
+    text: getGameStateText(gameState)
+  }
+}
 </script>
 
 <template>
   <div class="game-status">
-    <el-card shadow="never" :body-style="{ position: 'relative' }">
-      <!-- Subtle loading indicator at top -->
+    <el-card shadow="never" :body-style="{ position: 'relative', padding: '12px 16px' }">
+      <!-- Loading indicator -->
       <div v-if="loading" class="loading-indicator">
         <div class="loading-bar"></div>
       </div>
 
-      <div class="status-content">
-        <div class="status-header">
-          <span class="status-label">{{ t('gameStatus.title') }}</span>
-          <div class="status-actions">
-            <el-tag
-              v-if="status"
-              :type="getStatusType(status.status)"
-              size="small"
-            >
-              {{ getStatusText(status.status) }}
-            </el-tag>
-            <el-tag v-else type="info" size="small">{{ t('common.unknown') }}</el-tag>
+      <!-- Header: Status + Controls -->
+      <div class="status-header">
+        <span class="status-title">{{ t('gameStatus.title') }}</span>
+        <div class="status-right">
+          <el-tag :type="resolveStatusDisplay(status).type" size="small" effect="light" class="status-tag">
+            {{ resolveStatusDisplay(status).text }}
+          </el-tag>
+          <div class="header-actions">
             <el-button
               circle
               size="small"
@@ -120,7 +137,7 @@ const handleSongClick = () => {
               @click="handleRefresh"
               :title="t('gameStatus.refreshNow')"
             >
-              <el-icon :class="{ 'is-spinning': loading }"><refresh /></el-icon>
+              <el-icon :class="{ 'is-spinning': loading }"><Refresh /></el-icon>
             </el-button>
             <el-button
               circle
@@ -133,76 +150,59 @@ const handleSongClick = () => {
             </el-button>
           </div>
         </div>
+      </div>
 
-        <!-- Refresh Controls -->
-        <el-divider />
-        <div class="refresh-controls compact">
-          <div class="refresh-row compact-row">
-            <el-switch
-              :model-value="autoRefresh"
-              @update:model-value="handleAutoRefreshChange"
-              :active-text="t('gameStatus.autoRefresh')"
-              inline-prompt
-            />
-            <template v-if="autoRefresh">
-              <el-slider
-                :model-value="refreshInterval"
-                @update:model-value="handleIntervalChange"
-                :min="1"
-                :max="10"
-                :step="1"
-                :show-tooltip="false"
-                style="width: 200px;"
-              />
-              <span class="interval-value">{{ refreshInterval }}s</span>
-            </template>
-          </div>
+      <!-- Compact Refresh Controls -->
+      <div class="refresh-control" :class="{ 'no-song': !(status?.status === 'running' && status?.currentSongInfo) }">
+        <div class="refresh-left">
+          <span class="refresh-label">{{ t('gameStatus.autoRefresh') }}</span>
+          <el-switch
+            :model-value="autoRefresh"
+            @update:model-value="handleAutoRefreshChange"
+            size="small"
+          />
         </div>
+        <div v-if="autoRefresh" class="interval-control">
+          <el-slider
+            :model-value="refreshInterval"
+            @update:model-value="handleIntervalChange"
+            :min="1"
+            :max="10"
+            :step="1"
+            :show-tooltip="false"
+            size="small"
+            class="interval-slider"
+          />
+          <span class="interval-value">{{ refreshInterval }}s</span>
+        </div>
+      </div>
 
-        <template v-if="status?.status === 'running'">
-          <el-divider />
-
-          <div class="status-details">
-            <div class="detail-row">
-              <div class="detail-item">
-                <span class="detail-label">{{ t('gameStatus.gameState') }}:</span>
-                <el-tag
-                  :type="status.gameState === 'INGAME' ?
-                  'success' : ['UNKNOWN', 'NOT_READY', null, undefined, ''].includes(status.gameState) ?
-                  'warning' : 'primary'"
-                  size="small"
-                >
-                  {{ getGameStateText(status.gameState) }}
-                </el-tag>
-              </div>
+      <!-- Current Song (only when running) -->
+      <template v-if="status?.status === 'running' && status?.currentSongInfo">
+        <div class="song-card clickable" @click="handleSongClick">
+          <div class="song-left">
+            <div class="song-icon" :class="{ 'is-playing': status?.isIngame }">
+              <el-icon :size="20"><VideoPlay /></el-icon>
             </div>
-
-            <template v-if="status?.currentSongInfo">
-              <el-divider />
-              <div class="current-song-section">
-                <!-- 歌曲卡片（可点击） -->
-                <div class="song-card clickable" @click="handleSongClick">
-                  <div class="song-icon" :class="{ 'is-playing': status?.isIngame }">
-                    <el-icon :size="24"><VideoPlay /></el-icon>
-                  </div>
-                  <div class="song-info">
-                    <div class="song-label">{{ t('gameStatus.currentSelection') }}</div>
-                    <div class="song-name" :title="status.currentSongInfo.name">
-                      {{ status.currentSongInfo.name }}
-                    </div>
-                    <div class="song-meta">
-                      <span class="song-id">ID: {{ status.currentSongInfo.id }}</span>
-                      <el-tag
-                        v-if="status.currentChartStyle"
-                        class="chart-style-tag"
-                        :disable-transitions="true"
-                      >
-                        {{ getChartStyleDisplayName(status.currentChartStyle) }}
-                      </el-tag>
-                    </div>
-                  </div>
+            <div class="song-info">
+              <div class="song-name-row">
+                <span class="song-name" :title="status.currentSongInfo.name">
+                  {{ status.currentSongInfo.name }}
+                </span>
+                <span class="song-id">#{{ status.currentSongInfo.id }}</span>
+              </div>
+              <div class="song-meta">
+                <div class="meta-left">
+                  <span class="meta-label">{{ t('gameStatus.currentSelection') }}</span>
+                  <el-tag
+                    v-if="status.currentChartStyle"
+                    size="small"
+                    effect="plain"
+                    class="style-tag"
+                  >
+                    {{ getChartStyleDisplayName(status.currentChartStyle) }}
+                  </el-tag>
                 </div>
-                <!-- 难度集合（不可点击） -->
                 <div class="difficulties-row">
                   <span
                     v-for="diff in status.currentSongInfo.difficulties"
@@ -215,10 +215,10 @@ const handleSongClick = () => {
                   </span>
                 </div>
               </div>
-            </template>
+            </div>
           </div>
-        </template>
-      </div>
+        </div>
+      </template>
     </el-card>
 
     <el-alert
@@ -238,131 +238,226 @@ const handleSongClick = () => {
   margin-bottom: 0;
 }
 
-.status-content {
-  min-height: 100px;
-}
-
+/* Header Section */
 .status-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
 }
 
-.status-label {
+.status-title {
+  font-size: 14px;
   font-weight: 500;
   color: var(--el-text-color-primary);
-}
-
-.status-details {
-  display: flex;
-  flex-direction: column;
-}
-
-.detail-row {
-  display: flex;
-  align-items: center;
-  gap: 16px;
-  flex-wrap: wrap;
-}
-
-.detail-item {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-}
-
-.detail-label {
-  color: var(--el-text-color-secondary);
-  font-size: 13px;
-  min-width: 48px;
-}
-
-.detail-value {
-  color: var(--el-text-color-primary);
-  font-weight: 500;
-}
-
-.offset-tag {
-  font-family: monospace;
-}
-
-.offset-code {
-  font-family: inherit;
-  font-size: 12px;
-}
-
-.status-alert {
-  margin-top: 12px;
-  margin-bottom: 0;
-}
-
-.refresh-controls.compact {
-  gap: 4px;
-}
-
-.refresh-controls.compact .refresh-row {
-  gap: 24px;
-}
-
-.refresh-controls.compact .compact-row {
-  flex-wrap: nowrap;
-}
-
-.refresh-controls.compact .el-slider {
   flex-shrink: 0;
 }
 
-.refresh-controls {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.refresh-row {
+.status-right {
   display: flex;
   align-items: center;
   gap: 12px;
 }
 
-.interval-row {
-  padding-left: 44px;
+.status-tag {
+  font-weight: 500;
 }
 
-.refresh-hint {
+.header-actions {
+  display: flex;
+  align-items: center;
+}
+
+/* Refresh Control */
+.refresh-control {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 10px 0;
+  border-top: 1px solid var(--el-border-color-lighter);
+  border-bottom: 1px solid var(--el-border-color-lighter);
+}
+
+.refresh-control.no-song {
+  padding-bottom: 0;
+  border-bottom: none;
+}
+
+.refresh-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+}
+
+.refresh-label {
+  font-size: 13px;
+  color: var(--el-text-color-secondary);
+  white-space: nowrap;
+}
+
+.interval-control {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+  flex: 1;
+  min-width: 0;
+}
+
+.interval-slider {
+  width: 120px;
+  flex-shrink: 0;
+}
+
+.interval-value {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--el-text-color-primary);
+  background: var(--el-fill-color-light);
+  border-radius: 4px;
+  padding: 3px 8px;
+  min-width: 38px;
+  text-align: center;
+  flex-shrink: 0;
+}
+
+/* Song Card */
+.song-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-top: 12px;
+  padding: 12px;
+  height: 72px;
+  background: linear-gradient(135deg, var(--el-color-primary-light-9) 0%, var(--el-fill-color-light) 100%);
+  border-radius: 10px;
+  border: 1px solid var(--el-color-primary-light-8);
+  transition: all 0.2s ease;
+}
+
+.song-card.clickable {
+  cursor: pointer;
+}
+
+.song-card.clickable:hover {
+  background: linear-gradient(135deg, var(--el-color-primary-light-8) 0%, var(--el-color-primary-light-9) 100%);
+  border-color: var(--el-color-primary-light-7);
+}
+
+.song-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex: 1;
+  min-width: 0;
+  width: 100%;
+}
+
+.song-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  background: var(--el-color-primary);
+  border-radius: 8px;
+  color: white;
+  flex-shrink: 0;
+}
+
+.song-icon.is-playing {
+  background: linear-gradient(135deg, #67c23a 0%, #85ce61 100%);
+}
+
+.song-info {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+  flex: 1;
+}
+
+.song-name-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.song-name {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--el-text-color-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  height: 22px;
+  line-height: 22px;
+}
+
+.song-id {
+  font-size: 11px;
+  color: var(--el-text-color-secondary);
+  font-weight: 500;
+  flex-shrink: 0;
+}
+
+.song-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.meta-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.meta-label {
   font-size: 12px;
   color: var(--el-text-color-secondary);
 }
 
-.interval-label {
-  font-size: 13px;
-  color: var(--el-text-color-secondary);
-  white-space: nowrap;
-  min-width: 60px;
+.style-tag {
+  font-size: 11px;
+  height: 20px;
+  line-height: 18px;
+  padding: 0 6px;
+  transition: none;
 }
 
-.interval-value {
-  font-size: 13px;
-  color: var(--el-text-color-primary);
-  font-weight: 500;
-  min-width: 30px;
-  text-align: right;
-  display: inline-flex;
-  align-items: center;
-  height: 32px;
-  line-height: 32px;
+/* Difficulties */
+.difficulties-row {
+  display: flex;
+  gap: 4px;
+  flex-shrink: 0;
+  margin-left: auto;
 }
 
-.status-actions {
+.diff-badge {
   display: flex;
   align-items: center;
-  gap: 8px;
+  justify-content: center;
+  width: 24px;
+  height: 20px;
+  border-radius: 4px;
+  font-size:  11px;
+  font-weight: 600;
+  color: white;
 }
 
-.status-actions .el-button {
-  margin-left: 4px;
+.diff-badge.diff-disabled {
+  opacity: 0.4;
 }
 
-/* Loading indicator - subtle animation instead of v-loading mask */
+/* Loading indicator */
 .loading-indicator {
   position: absolute;
   top: 0;
@@ -381,361 +476,105 @@ const handleSongClick = () => {
 }
 
 @keyframes loading-slide {
-  0% {
-    transform: translateX(-100%);
-  }
-  100% {
-    transform: translateX(250%);
-  }
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(250%); }
 }
 
-/* Current Song Section Styles */
-.current-song-section {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
+/* Status Alert */
+.status-alert {
+  margin-top: 8px;
 }
 
-.song-card.clickable {
-  cursor: pointer;
-}
-
-.song-card.clickable:hover {
-  opacity: 0.8;
-}
-
-.difficulties-row {
-  display: flex;
-  gap: 8px;
-  flex-wrap: wrap;
-  padding: 0 4px;
-}
-
-.diff-badge {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 4px 10px;
-  border-radius: 4px;
-  font-size: 12px;
-  font-weight: 600;
-}
-
-.song-id {
-  font-size: 12px;
-  color: var(--el-text-color-secondary);
-}
-
-.song-meta {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-top: 2px;
-}
-
-.chart-style-tag {
-  font-size: 11px;
-  height: 18px;
-  line-height: 16px;
-  padding: 0 6px;
-  background-color: #ffffff;
-  border-color: #409eff;
-  color: #409eff;
-}
-
-.song-card {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  height: 90px;
-  background: linear-gradient(135deg, var(--el-color-primary-light-9) 0%, var(--el-color-primary-light-8) 100%);
-  border-radius: 12px;
-  padding: 16px;
-  border: 1px solid var(--el-color-primary-light-7);
-  transition: opacity 0.2s;
-  box-sizing: border-box;
-}
-
-.song-icon {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 48px;
-  height: 48px;
-  background: var(--el-color-primary);
-  border-radius: 50%;
-  color: white;
-  flex-shrink: 0;
-}
-
-.song-icon.is-playing {
-  background: linear-gradient(135deg, #67c23a 0%, #85ce61 100%);
-  //box-shadow: 0 0 15px rgba(103, 194, 58, 0.6);
-}
-
-@keyframes pulse {
-  0%, 100% {
-    transform: scale(1);
-  }
-  50% {
-    transform: scale(1.05);
-  }
-}
-
-.song-info {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  min-width: 0;
-  flex: 1;
-}
-
-.song-label {
-  font-size: 12px;
-  color: var(--el-text-color-secondary);
-}
-
-.song-name {
-  font-size: 16px;
-  font-weight: 600;
-  color: var(--el-text-color-primary);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  height: 22px;
-  line-height: 22px;
-}
-
-.difficulty-card {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  background: var(--el-fill-color-light);
-  border-radius: 10px;
-  padding: 12px 16px;
-}
-
-.difficulty-label {
-  font-size: 13px;
-  color: var(--el-text-color-secondary);
-}
-
-.difficulty-badge {
-  width: 32px;
-  height: 32px;
-  border-radius: 4px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-weight: 600;
-  font-size: 12px;
-  color: white;
-  flex-shrink: 0;
-}
-
-/* 禁用状态的难度徽章 */
-.difficulty-badge.diff-disabled {
-  opacity: 0.6;
-}
-
-/* Difficulty Colors - 保留用于其他用途 */
-.diff-easy {
-  background: linear-gradient(135deg, #409eff 0%, #66b1ff 100%);
-  color: white;
-}
-
-.diff-normal {
-  background: linear-gradient(135deg, #67c23a 0%, #85ce61 100%);
-  color: white;
-}
-
-.diff-hard {
-  background: linear-gradient(135deg, #e6a23c 0%, #eebe77 100%);
-  color: white;
-}
-
-.diff-extreme {
-  background: linear-gradient(135deg, #f56c6c 0%, #f89898 100%);
-  color: white;
-}
-
-.diff-exex {
-  background: linear-gradient(135deg, #9b59b6 0%, #bb8fce 100%);
-  color: white;
-  box-shadow: 0 0 10px rgba(155, 89, 182, 0.4);
-}
-
-.diff-reserved {
-  background: linear-gradient(135deg, #909399 0%, #b1b3b8 100%);
-  color: white;
-}
-
-.diff-unknown {
-  background: linear-gradient(135deg, #606266 0%, #909399 100%);
-  color: white;
-  border: 1px dashed #c0c4cc;
-}
-
-/* Refresh button spin animation */
+/* Spin animation */
 .is-spinning {
   animation: spin 1s linear infinite;
 }
 
 @keyframes spin {
-  from {
-    transform: rotate(0deg);
-  }
-  to {
-    transform: rotate(360deg);
-  }
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
 }
 
-/* Refresh button hover effect */
 .is-refreshing {
   opacity: 0.8;
   cursor: not-allowed;
 }
 
-/* Mobile optimizations */
+/* Mobile Responsive */
 @media (max-width: 768px) {
-  .status-content {
-    min-height: auto;
-  }
-
   .status-header {
     flex-wrap: wrap;
-    gap: 10px;
+    gap: 8px;
   }
 
-  .status-label {
-    font-size: 15px;
-  }
-
-  .refresh-controls {
+  .song-card {
+    flex-direction: column;
+    align-items: flex-start;
     gap: 12px;
   }
 
-  .refresh-row {
-    flex-wrap: nowrap;
-    gap: 10px;
-  }
-
-  .refresh-controls.compact .refresh-row {
-    gap: 20px;
-  }
-
-  .refresh-controls.compact .el-slider {
-    width: 180px !important;
-  }
-
-  .interval-value {
-    font-size: 13px;
-    min-width: 25px;
-  }
-
-  .detail-item {
-    flex-wrap: wrap;
-    gap: 4px;
-  }
-
-  .detail-row {
-    gap: 12px;
-  }
-
-  .detail-label {
-    font-size: 14px;
-    min-width: 42px;
-  }
-
-  .status-actions .el-button {
-    min-height: 36px;
-    min-width: 36px;
+  .difficulties-row {
+    margin-left: auto;
   }
 }
 
-/* 480px-768px range - ensure slider fits */
-@media (max-width: 600px) and (min-width: 481px) {
-  .refresh-controls :deep(.el-slider__marks-text) {
-    font-size: 9px;
-  }
-}
-
-/* Small mobile optimizations */
 @media (max-width: 480px) {
-  .game-status {
-    margin-bottom: 12px;
-  }
-
-  .status-content {
-    padding: 4px;
+  :deep(.el-card__body) {
+    padding: 10px 12px !important;
   }
 
   .status-header {
-    gap: 8px;
-    flex-wrap: wrap;
+    gap: 6px;
   }
 
-  .status-label {
+  .status-title {
+    font-size: 13px;
+  }
+
+  .status-right {
+    gap: 8px;
+  }
+
+  .refresh-control {
+    gap: 12px;
+  }
+
+  .refresh-left {
+    gap: 8px;
+  }
+
+  .interval-control {
+    gap: 8px;
+  }
+
+  .interval-slider {
+    width: 120px;
+  }
+
+  .interval-value {
+    font-size: 11px;
+    padding: 2px 6px;
+    min-width: 34px;
+  }
+
+  .song-card {
+    padding: 10px;
+    margin-top: 10px;
+  }
+
+  .song-icon {
+    width: 36px;
+    height: 36px;
+  }
+
+  .song-name {
     font-size: 14px;
   }
 
-  .status-actions {
-    flex-wrap: wrap;
-    gap: 6px;
-  }
-
-  .status-actions .el-tag {
-    font-size: 12px;
-    padding: 0 8px;
-    height: 28px;
-    line-height: 26px;
-  }
-
-  .refresh-row {
-    gap: 6px;
-    flex-wrap: nowrap;
-  }
-
-  .refresh-controls.compact .refresh-row {
-    gap: 16px;
-  }
-
-  .refresh-controls.compact .el-slider {
-    width: 160px !important;
-  }
-
-  .interval-value {
-    font-size: 12px;
-    min-width: 20px;
-  }
-
-  .detail-item {
-    gap: 4px;
-    flex-wrap: wrap;
-  }
-
-  .detail-row {
-    gap: 8px;
-  }
-
-  .detail-label {
-    font-size: 13px;
-    min-width: auto;
-  }
-
-  .offset-code {
-    font-size: 11px;
-  }
-}
-
-/* Extra small mobile - ultra compact */
-@media (max-width: 360px) {
-  .refresh-controls.compact .el-slider {
-    width: 140px !important;
-  }
-
-  .interval-value {
-    font-size: 11px;
+  .diff-badge {
+    width: 24px;
+    height: 20px;
+    font-size:  11px;
   }
 }
 </style>
