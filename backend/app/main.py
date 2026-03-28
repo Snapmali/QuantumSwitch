@@ -34,53 +34,60 @@ def get_local_ip() -> str:
         return '127.0.0.1'
 
 
+def setup_console_font() -> None:
+    """Set Windows console font to Consolas at startup for proper Unicode display."""
+    try:
+        import ctypes
+        from ctypes import wintypes
+        import os
+
+        if os.name != 'nt':
+            return
+
+        kernel32 = ctypes.windll.kernel32
+
+        # Set console code page to UTF-8 (65001)
+        kernel32.SetConsoleOutputCP(65001)
+
+        # Define CONSOLE_FONT_INFOEX structure
+        class CONSOLE_FONT_INFOEX(ctypes.Structure):
+            _fields_ = [
+                ("cbSize", wintypes.ULONG),
+                ("nFont", wintypes.DWORD),
+                ("dwFontSizeX", wintypes.SHORT),
+                ("dwFontSizeY", wintypes.SHORT),
+                ("FontFamily", wintypes.UINT),
+                ("FontWeight", wintypes.UINT),
+                ("FaceName", wintypes.WCHAR * 32)
+            ]
+
+        # Get stdout handle
+        STD_OUTPUT_HANDLE = -11
+        hConsole = kernel32.GetStdHandle(STD_OUTPUT_HANDLE)
+
+        # Get current font info
+        font_info = CONSOLE_FONT_INFOEX()
+        font_info.cbSize = ctypes.sizeof(CONSOLE_FONT_INFOEX)
+
+        if kernel32.GetCurrentConsoleFontEx(hConsole, False, ctypes.byref(font_info)):
+            # Set to Consolas font while keeping other settings
+            font_info.FaceName = "Consolas"
+            # Try to set a reasonable font size
+            font_info.dwFontSizeX = 0  # 0 means don't change
+            font_info.dwFontSizeY = 16  # 16 pixels height
+            kernel32.SetCurrentConsoleFontEx(hConsole, False, ctypes.byref(font_info))
+
+        logger.debug("Console font set to Consolas")
+    except Exception:
+        # If font setting fails, continue anyway
+        pass
+
+
 def print_qr_code(url: str) -> None:
     """Print QR code to console for easy mobile access."""
     try:
         import qrcode
         from io import StringIO
-        import ctypes
-        from ctypes import wintypes
-        import os
-
-        # Set Windows console to UTF-8 mode and font for proper Unicode display
-        if os.name == 'nt':
-            kernel32 = ctypes.windll.kernel32
-            # Set console code page to UTF-8 (65001)
-            kernel32.SetConsoleOutputCP(65001)
-
-            # Try to set console font to Consolas for better Unicode support
-            try:
-                # Define CONSOLE_FONT_INFOEX structure
-                class CONSOLE_FONT_INFOEX(ctypes.Structure):
-                    _fields_ = [
-                        ("cbSize", wintypes.ULONG),
-                        ("nFont", wintypes.DWORD),
-                        ("dwFontSizeX", wintypes.SHORT),
-                        ("dwFontSizeY", wintypes.SHORT),
-                        ("FontFamily", wintypes.UINT),
-                        ("FontWeight", wintypes.UINT),
-                        ("FaceName", wintypes.WCHAR * 32)
-                    ]
-
-                # Get stdout handle
-                STD_OUTPUT_HANDLE = -11
-                hConsole = kernel32.GetStdHandle(STD_OUTPUT_HANDLE)
-
-                # Get current font info
-                font_info = CONSOLE_FONT_INFOEX()
-                font_info.cbSize = ctypes.sizeof(CONSOLE_FONT_INFOEX)
-
-                if kernel32.GetCurrentConsoleFontEx(hConsole, False, ctypes.byref(font_info)):
-                    # Set to Consolas font while keeping other settings
-                    font_info.FaceName = "Consolas"
-                    # Try to set a reasonable font size
-                    font_info.dwFontSizeX = 0  # 0 means don't change
-                    font_info.dwFontSizeY = 16  # 16 pixels height
-                    kernel32.SetCurrentConsoleFontEx(hConsole, False, ctypes.byref(font_info))
-            except Exception:
-                # If font setting fails, continue anyway
-                pass
 
         qr = qrcode.QRCode(
             version=1,
@@ -121,6 +128,9 @@ def show_access_info():
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Application lifespan handler."""
+    # Setup console font at startup for proper Unicode display
+    setup_console_font()
+
     logger.info(f"Starting {settings.APP_NAME} v{settings.APP_VERSION}")
 
     # Bootstrap dependency injection container

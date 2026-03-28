@@ -8,9 +8,14 @@
 
 </div>
 
-Quantum Switch is a web-based song switching tool for **Hatsune Miku: Project DIVA Mega Mix+** that allows you to quickly select and jump to any song in the game through your browser.
+Quantum Switch is a local web-based tool for Hatsune Miku: Project DIVA Mega Mix+ that allows quick song switching through your browser.
 
-Supports switching between Arcade, Console, and Mixed styles.
+## Features
+- Switch to any song via web interface
+- Support Arcade/Console/Mixed chart style switching
+- Song search, alias search, and Mod filtering
+- Favorites functionality for quick access to frequently used songs
+- Responsive design, supports mobile and tablet
 
 ## Special Thanks
 
@@ -18,7 +23,7 @@ Supports switching between Arcade, Console, and Mixed styles.
 - Uses the original song `mod_pv_db` from hiki8man's [Select Song with PVID](https://gamebanana.com/tools/21051) project
 - Thanks to sasnchis' [DivaSongViewer](https://gamebanana.com/tools/18296) project; the core song switching logic and `mod_pv_db` parsing logic in this project heavily references the DivaSongViewer open-source project
 - Project DIVA Mega Mix+ community, GameBanana's [mod_pv_db structure guide](https://gamebanana.com/tuts/15681#H1_13)
-- Various AI tools — this wouldn't be possible without them
+- Various AI tools. Can't get anything done without them.
 
 ---
 
@@ -286,7 +291,7 @@ python -m PyInstaller build.spec
 - Ensure the game is running before attempting to switch songs
 - Game major updates may require waiting for tool memory address updates
 - In some cases, may need to run as administrator
-- Most of this project's code is vibe coding (including this README), please use with caution
+- Most of the code for this project comes from vibe coding (including this README), please use with caution
 
 ---
 
@@ -418,7 +423,7 @@ All API responses follow a unified format:
 ## Additional Thanks
 
 - Claude Code for vibe coding
-- Kimi K2.5
+- Kimi K2.5, GLM-5
 - Nano Banana 2 for icon
 - [FastAPI](https://fastapi.tiangolo.com/)
 - [Vue.js](https://vuejs.org/)

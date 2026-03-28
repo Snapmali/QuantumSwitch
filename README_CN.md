@@ -8,9 +8,14 @@
 
 </div>
 
-Quantum Switch 是一个用于 Hatsune Miku: Project DIVA Mega Mix+ 的网页版歌曲切换工具，可以通过浏览器快速选择并跳转到游戏中的任意歌曲。
+Quantum Switch 是一个用于 Hatsune Miku: Project DIVA Mega Mix+ 的本地 Web 工具，通过浏览器界面实现快速歌曲切换。
 
-支持在Arcade、Console、Mixed风格间切换。
+## 功能特点
+- 通过网页界面快速切换任意歌曲
+- 支持 Arcade/Console/Mixed 谱面风格切换
+- 支持歌曲搜索、别名搜索、Mod 筛选
+- 收藏功能，快速访问常用歌曲
+- 响应式设计，支持手机/平板访问
 
 ## 特别感谢
 
@@ -418,7 +423,7 @@ QuantumSwitch/
 ## 另外致谢
 
 - Claude Code for vibe coding
-- Kimi K2.5
+- Kimi K2.5, GLM-5
 - Nano Banana 2 for icon
 - [FastAPI](https://fastapi.tiangolo.com/)
 - [Vue.js](https://vuejs.org/)
