@@ -126,9 +126,20 @@ const resolveStatusDisplay = (status: GameStatusDisplay | null) => {
       <div class="status-header">
         <span class="status-title">{{ t('gameStatus.title') }}</span>
         <div class="status-right">
-          <el-tag :type="resolveStatusDisplay(status).type" size="small" effect="light" class="status-tag">
-            {{ resolveStatusDisplay(status).text }}
-          </el-tag>
+          <div class="status-tags">
+            <el-tag :type="resolveStatusDisplay(status).type" size="small" effect="light" class="status-tag">
+              {{ resolveStatusDisplay(status).text }}
+            </el-tag>
+            <el-tag
+              v-if="status?.hasNewClassics"
+              type="success"
+              size="small"
+              effect="light"
+              class="new-classics-tag"
+            >
+              NewClassics
+            </el-tag>
+          </div>
           <div class="header-actions">
             <el-button
               circle
@@ -260,7 +271,17 @@ const resolveStatusDisplay = (status: GameStatusDisplay | null) => {
   gap: 12px;
 }
 
+.status-tags {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
 .status-tag {
+  font-weight: 500;
+}
+
+.new-classics-tag {
   font-weight: 500;
 }
 

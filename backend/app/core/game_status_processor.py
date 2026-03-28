@@ -118,6 +118,15 @@ class GameStatusProcessor:
         else:
             return ChartStyle.ARCADE
 
+    def has_new_classics(self) -> bool:
+        """
+        Check if NewClassics.dll is loaded in the game process.
+
+        Returns:
+            True if NewClassics.dll is loaded, False otherwise
+        """
+        return self._mem.get_cached_dll_base(DllEnum.NEW_CLASSICS) is not None
+
     def get_last_selection(self) -> Tuple[Optional[int], Optional[int], Optional[int]]:
         """
         Get current song selection data.

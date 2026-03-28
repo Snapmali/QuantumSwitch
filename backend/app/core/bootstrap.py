@@ -3,7 +3,7 @@ from .game_status_processor import GameStatusProcessor
 from ..config import settings
 from ..utils.logger import logger
 from .container import get_container
-from .game_dir_processor import detect_game_directories
+from ..utils.game_dir_processor import detect_game_directories
 from .process_manager import ProcessManager
 from .memory_operator import MemoryOperator
 from .song_selector import SongSelector

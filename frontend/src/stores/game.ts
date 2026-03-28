@@ -44,6 +44,7 @@ export const useGameStore = defineStore('game', () => {
       currentSongInfo: s.currentSongInfo,
       currentChartStyle: s.currentChartStyle,
       isIngame: s.isIngame,
+      hasNewClassics: s.hasNewClassics,
     }
 
     return display

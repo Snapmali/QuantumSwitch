@@ -1,7 +1,6 @@
 """Alias manager for handling song aliases persistence and fuzzy matching."""
 import json
 import uuid
-from pathlib import Path
 from typing import Dict, List, Optional
 
 from ..config import DATA_DIR

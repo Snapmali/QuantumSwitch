@@ -83,6 +83,9 @@ def get_game_status_internal() -> GameStatusResponse:
         if song:
             current_song_info = _build_current_song_info(song, style)
 
+    # Check if NewClassics.dll is loaded
+    has_new_classics = gsp.has_new_classics()
+
     return GameStatusResponse(
         running=True,
         processId=pid,
@@ -91,6 +94,7 @@ def get_game_status_internal() -> GameStatusResponse:
         currentSongInfo=current_song_info,
         currentChartStyle=current_style,
         isIngame=is_ingame if is_ingame is not None else False,
+        hasNewClassics=has_new_classics,
     )
 
 

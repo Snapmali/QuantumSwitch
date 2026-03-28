@@ -351,6 +351,7 @@ class GameStatusResponse(BaseModel):
     currentSongInfo: Optional[CurrentSongInfo] = None  # 新增：当前歌曲信息
     currentChartStyle: Optional[str] = None  # 新增：当前 ChartStyle (ARCADE/CONSOLE/MIXED)
     isIngame: bool = False  # 新增：是否正在游玩中
+    hasNewClassics: Optional[bool] = None  # 新增：是否加载 NewClassics.dll
 
 
 class SwitchSongRequest(BaseModel):

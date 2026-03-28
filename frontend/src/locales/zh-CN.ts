@@ -97,7 +97,7 @@ export default {
     currentSelection: '当前选择',
     autoRefresh: '自动刷新',
     refreshNow: '刷新状态',
-    reattach: '重连进程',
+    reattach: '重连游戏进程',
     gameNotRunningTip: '请先启动 Hatsune Miku: Project DIVA Mega Mix+ 游戏',
     seconds: '秒',
   },

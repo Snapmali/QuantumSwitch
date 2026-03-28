@@ -21,6 +21,7 @@ a = Analysis(
         ('app', 'app'),
         (r'..\frontend\dist', r'frontend\dist'),
         ('data/vanilla', 'data/vanilla'),
+        (r'..\README.md', '.'),
     ],
     hiddenimports=[
         'uvicorn.logging',

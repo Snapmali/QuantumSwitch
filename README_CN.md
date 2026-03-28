@@ -4,6 +4,8 @@
 
 ### _ねこみみは量子力学_
 
+简体中文 | [English](README_EN.md)
+
 </div>
 
 Quantum Switch 是一个用于 Hatsune Miku: Project DIVA Mega Mix+ 的网页版歌曲切换工具，可以通过浏览器快速选择并跳转到游戏中的任意歌曲。
@@ -26,8 +28,6 @@ Quantum Switch 是一个用于 Hatsune Miku: Project DIVA Mega Mix+ 的网页版
 |------|------|
 | 操作系统 | Windows 10/11 (64位) |
 | 游戏 | Hatsune Miku: Project DIVA MegaMix+ (Steam版) |
-| Python | 3.11 或更高版本 |
-| Node.js | 18 或更高版本 (仅开发/构建需要) |
 | 浏览器 | Chrome、Edge、Firefox 等现代浏览器 |
 
 ---
@@ -81,14 +81,21 @@ GAME_PROCESS_NAME=DivaMegaMix.exe
 
 ## 从源码开始
 
-### 1. 获取代码
+### 1. 环境要求
+
+| 项目 | 要求 |
+|------|------|
+| Python | 3.11 或更高版本 |
+| Node.js | 18 或更高版本 (仅开发/构建需要) |
+
+### 2. 获取代码
 
 ```bash
 git clone https://github.com/Snapmali/QuantumSwitch.git
 cd QuantumSwitch
 ```
 
-### 2. 安装后端依赖
+### 3. 安装后端依赖
 
 ```bash
 cd backend
@@ -97,7 +104,7 @@ python -m venv .venv
 pip install -r requirements.txt
 ```
 
-### 3. 配置 Mods 目录
+### 4. 配置 Mods 目录
 
 编辑配置文件：
 
@@ -118,14 +125,14 @@ HOST=0.0.0.0
 PORT=8000
 ```
 
-### 4. 安装前端依赖（仅开发模式需要）
+### 5. 安装前端依赖（仅开发模式需要）
 
 ```bash
 cd ..\frontend
 npm install
 ```
 
-### 5. 启动方式
+### 6. 启动方式
 
 #### 开发模式（前后端分离）
 
@@ -165,7 +172,7 @@ python start.py
 
 访问 http://localhost:8000 使用工具。
 
-### 6. 构建可执行文件
+### 7. 构建可执行文件
 
 #### 准备工作
 
@@ -234,19 +241,28 @@ python -m PyInstaller build.spec
 
 ## 故障排除
 
-### 问题：启动时提示 "Mods 目录未找到"
+### 问题：歌曲列表为空或不完整
 
 **解决方案：**
-1. 检查 `.env` 文件中的 `GAME_MODS_DIRECTORY` 路径是否正确
-2. 确保路径使用反斜杠 `\` 或双反斜杠 `\\`
-3. 确保路径指向的是游戏目录下的 mods 文件夹
+1. 点击歌曲搜索框旁的刷新按钮重新加载歌曲列表
+2. 检查 `.env` 文件中的 `GAME_MODS_DIRECTORY` 路径是否正确
+3. 确保路径使用反斜杠 `\` 或双反斜杠 `\\`
+4. 确保路径指向的是游戏目录下的 mods 文件夹
+5. 重启后端服务重新加载
 
-### 问题：网页显示 "未检测到游戏进程"
+### 问题：网页中游戏状态显示 "未运行"
 
 **解决方案：**
 1. 确保游戏已启动
-2. 确保使用的是 Steam 版本的 Project DIVA Mega Mix+
-3. 检查任务管理器中进程名是否为 `DivaMegaMix.exe`
+2. 点击 "刷新状态" 按钮
+3. 确保使用的是 Steam 版本的 Project DIVA Mega Mix+
+4. 检查任务管理器中进程名是否为 `DivaMegaMix.exe`
+
+### 问题：游戏已安装 NewClassics，而网页中游戏状态未显示，或切换谱面风格失败
+
+**解决方案：**
+1. 点击 "重连游戏进程" 按钮
+2. 重启后端服务重新加载
 
 ### 问题：切换歌曲后游戏无反应
 
@@ -254,13 +270,6 @@ python -m PyInstaller build.spec
 1. 确保游戏在可接受指令的状态
 2. 如果正在菜单选择界面，需要手动进入节奏游戏菜单
 3. 检查后端控制台是否有错误日志
-
-### 问题：歌曲列表为空或不完整
-
-**解决方案：**
-1. 检查 mods 目录下是否有 `rom/mod_pv_db.txt` 或 `rom/mdata_pv_db.txt` 文件
-2. 确保文件编码为 UTF-8
-3. 重启后端服务重新加载
 
 ### 问题：前端构建失败
 
@@ -317,7 +326,6 @@ QuantumSwitch/
 │   │   │   ├── pvdb_parser.py        # Mod 数据库解析
 │   │   │   ├── alias_manager.py      # 歌曲别名管理
 │   │   │   ├── favorites_manager.py  # 收藏管理
-│   │   │   ├── game_dir_processor.py # 游戏目录处理
 │   │   │   ├── game_status_processor.py  # 游戏状态处理
 │   │   │   ├── bootstrap.py          # 启动初始化
 │   │   │   └── container.py          # 依赖注入容器
@@ -332,6 +340,7 @@ QuantumSwitch/
 │   │   │   └── process_module.py     # 进程模块模型
 │   │   ├── utils/                    # 工具函数
 │   │   │   ├── __init__.py
+│   │   │   ├── game_dir_processor.py # 游戏目录处理
 │   │   │   └── logger.py             # 日志配置
 │   │   ├── config.py                 # 应用配置
 │   │   └── main.py                   # FastAPI 应用入口

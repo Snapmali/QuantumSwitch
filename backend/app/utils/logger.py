@@ -46,7 +46,7 @@ if multiprocessing.parent_process() is None:
         rotation="10 MB",
         retention="7 days",
         format="{time:YYYY-MM-DD HH:mm:ss} | {level: <8} | {name}:{function}:{line} - {message}",
-        level="DEBUG",
+        level="DEBUG" if _get_debug_mode() else "INFO",
         encoding="utf-8",
         enqueue=True,
         delay=True  # Defer file opening until first log

@@ -1,7 +1,6 @@
 """Dependency injection container for managing global service instances."""
-from typing import Optional, Type, TypeVar, Dict, Any, Callable
-from functools import wraps
 import threading
+from typing import Optional, Type, TypeVar, Dict, Any, Callable
 
 T = TypeVar('T')
 

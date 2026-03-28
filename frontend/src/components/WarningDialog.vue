@@ -16,8 +16,7 @@ defineExpose({ open })
   <el-dialog
     v-model="visible"
     :title="t('warningDialog.title')"
-    width="90%"
-    :max-width="500"
+    width="500px"
     :close-on-click-modal="false"
     :show-close="false"
     :close-on-press-escape="false"

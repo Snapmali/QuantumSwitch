@@ -1,7 +1,9 @@
 """Song-related API endpoints."""
-import traceback
 from typing import Optional
+
 from fastapi import APIRouter, HTTPException, Query
+
+from ..core.bootstrap import get_pvdb_parser, get_favorites_manager, get_alias_manager
 from ..models import (
     SongResponse,
     SongListResponse,
@@ -13,7 +15,6 @@ from ..models import (
     ApiResponse,
     ModInfoSearchItem,
 )
-from ..core.bootstrap import get_pvdb_parser, get_favorites_manager, get_alias_manager
 from ..utils.logger import logger
 
 router = APIRouter(prefix="/songs", tags=["songs"])

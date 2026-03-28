@@ -342,6 +342,7 @@ export interface GameStatus {
   currentSongInfo?: CurrentSongInfo  // 当前歌曲信息
   currentChartStyle?: string  // 当前 ChartStyle (ARCADE/CONSOLE/MIXED)
   isIngame?: boolean  // 是否正在游玩中
+  hasNewClassics?: boolean  // 是否加载 NewClassics.dll
 }
 
 // Game status display format for GameStatus component
@@ -351,6 +352,7 @@ export interface GameStatusDisplay {
   currentSongInfo?: CurrentSongInfo  // 当前歌曲完整信息
   currentChartStyle?: string  // 当前 ChartStyle
   isIngame?: boolean  // 是否正在游玩中
+  hasNewClassics?: boolean  // 是否加载 NewClassics.dll
 }
 
 // API response wrapper
