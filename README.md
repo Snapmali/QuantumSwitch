@@ -14,7 +14,7 @@ Supports switching between Arcade, Console, and Mixed styles.
 
 ## Special Thanks
 
-- Thanks to 萌新安定 for open-sourcing the memory addresses and explaining the logic, which greatly helped in implementing this project
+- Thanks to hiki8man for open-sourcing the memory addresses and explaining the logic, which greatly helped in implementing this project
 - Uses the original song `mod_pv_db` from hiki8man's [Select Song with PVID](https://gamebanana.com/tools/21051) project
 - Thanks to sasnchis' [DivaSongViewer](https://gamebanana.com/tools/18296) project; the core song switching logic and `mod_pv_db` parsing logic in this project heavily references the DivaSongViewer open-source project
 - Project DIVA Mega Mix+ community, GameBanana's [mod_pv_db structure guide](https://gamebanana.com/tuts/15681#H1_13)

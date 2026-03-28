@@ -3,12 +3,12 @@
 Core Logic Acknowledgment:
     The song switching implementation in this module is based on the core logic
     from hiki8man's Select Song with PVID and sasnchis's DivaSongViewer, along with
-    memory addresses and logic open-sourced by 萌新安定:
+    memory addresses and logic open-sourced by hiki8man:
     https://gamebanana.com/tools/21051
     https://gamebanana.com/tools/18296
     https://github.com/sasnchis/DivaSongViewer/tree/master
 
-    Huge thanks to 萌新安定, hiki8man and sasnchis for reverse engineering and documenting these techniques.
+    Huge thanks to hiki8man and sasnchis for reverse engineering and documenting these techniques.
 """
 import time
 from enum import Enum
