@@ -19,9 +19,10 @@ Quantum Switch 是一个用于 Hatsune Miku: Project DIVA Mega Mix+ 的本地 We
 
 ## 特别感谢
 
-- 特别感谢 hiki8man 大佬对相关内存地址的开源和逻辑讲解，对工程落地提供了很大帮助
+- 特别感谢 hiki8man 大佬的测试，以及对相关内存地址的开源和读写逻辑讲解，对工程落地提供了很大帮助
 - 使用了 hiki8man 的 [Select Song with PVID](https://gamebanana.com/tools/21051) 项目的原版歌曲 mod_pv_db
 - 感谢 sasnchis 的 [DivaSongViewer](https://gamebanana.com/tools/18296) 项目，本项目中歌曲切换核心逻辑、mod_pv_db 解析逻辑大量参考 DivaSongViewer 开源项目
+- 感谢 vixen256 的 [DIVA Mod Archive](https://github.com/vixen256/divamodarchive)，pv_db 和 nc_db 的解析逻辑参考了此项目
 - Project DIVA Mega Mix+ 社区，GameBanana 的 [mod_pv_db 结构说明](https://gamebanana.com/tuts/15681#H1_13)
 - 各路 AI，没这个办不成事
 

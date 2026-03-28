@@ -19,9 +19,10 @@ Quantum Switch is a local web-based tool for Hatsune Miku: Project DIVA Mega Mix
 
 ## Special Thanks
 
-- Thanks to hiki8man for open-sourcing the memory addresses and explaining the logic, which greatly helped in implementing this project
-- Uses the original song `mod_pv_db` from hiki8man's [Select Song with PVID](https://gamebanana.com/tools/21051) project
-- Thanks to sasnchis' [DivaSongViewer](https://gamebanana.com/tools/18296) project; the core song switching logic and `mod_pv_db` parsing logic in this project heavily references the DivaSongViewer open-source project
+- Thanks to hiki8man for testing, and open-sourcing the memory addresses and r/w logic, which greatly helped in implementing this project
+- Uses the vanilla song `mod_pv_db` from hiki8man's [Select Song with PVID](https://gamebanana.com/tools/21051) project
+- sasnchis' [DivaSongViewer](https://gamebanana.com/tools/18296) project; the core song switching logic and `mod_pv_db` parsing logic in this project heavily references the DivaSongViewer open-source project
+- vixen256's [DIVA Mod Archive](https://github.com/vixen256/divamodarchive). The parsing logic for pv_db and nc_db references this project.
 - Project DIVA Mega Mix+ community, GameBanana's [mod_pv_db structure guide](https://gamebanana.com/tuts/15681#H1_13)
 - Various AI tools. Can't get anything done without them.
 
