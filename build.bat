@@ -120,17 +120,21 @@ copy "dist\QuantumSwitch.exe" "dist\QuantumSwitch\"
 :: Copy config template
 copy ".env" "dist\QuantumSwitch\config\.env.template"
 
-:: Copy data files
+:: Copy data files (only vanilla)
 echo [INFO] Copying data files...
-xcopy "data" "dist\QuantumSwitch\data\" /s /i /y
+xcopy "data\vanilla" "dist\QuantumSwitch\data\vanilla\" /s /i /y
 
 :: Copy frontend dist to bundled app
-echo [INFO] Copying frontend files...
-xcopy "..\frontend\dist" "dist\QuantumSwitch\frontend\dist\" /s /i /y
+@REM echo [INFO] Copying frontend files...
+@REM xcopy "..\frontend\dist" "dist\QuantumSwitch\frontend\" /s /i /y
 
 :: Copy icon to bundled app root
 echo [INFO] Copying icon file...
 copy "icon.ico" "dist\QuantumSwitch\"
+
+:: Copy readme
+echo [INFO] Copying readme...
+copy "..\README*" "dist\QuantumSwitch\" 2>nul
 
 echo.
 echo ==========================================

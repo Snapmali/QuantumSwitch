@@ -19,9 +19,7 @@ a = Analysis(
     binaries=[],
     datas=[
         ('app', 'app'),
-        (r'..\frontend\dist', r'frontend\dist'),
-        ('data/vanilla', 'data/vanilla'),
-        (r'..\README*', '.'),
+        (r'..\frontend\dist', r'frontend'),
     ],
     hiddenimports=[
         'uvicorn.logging',

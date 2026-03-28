@@ -15,6 +15,7 @@ export const useGameStore = defineStore('game', () => {
     currentSongInfo: undefined,
     currentChartStyle: undefined,
     isIngame: undefined,
+    hasNewClassics: undefined,
   })
   const switching = ref(false)
   const loading = ref(false)
@@ -40,11 +41,11 @@ export const useGameStore = defineStore('game', () => {
 
     const display: GameStatusDisplay = {
       status: statusStr,
-      gameState: s.gameState,
-      currentSongInfo: s.currentSongInfo,
-      currentChartStyle: s.currentChartStyle,
-      isIngame: s.isIngame,
-      hasNewClassics: s.hasNewClassics,
+      gameState: s.gameState || undefined,
+      currentSongInfo: s.currentSongInfo || undefined,
+      currentChartStyle: s.currentChartStyle || undefined,
+      isIngame: s.isIngame || false,
+      hasNewClassics: s.hasNewClassics || false,
     }
 
     return display
@@ -59,7 +60,16 @@ export const useGameStore = defineStore('game', () => {
       status.value = response.data.data
     } catch (err) {
       // Silent fail - game might not be running
-      status.value.running = false
+      status.value = {
+        running: false,
+        processId: undefined,
+        currentSongId: undefined,
+        gameState: undefined,
+        currentSongInfo: undefined,
+        currentChartStyle: undefined,
+        isIngame: undefined,
+        hasNewClassics: undefined,
+      }
     } finally {
       loading.value = false
     }

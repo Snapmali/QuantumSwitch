@@ -124,6 +124,10 @@ def show_access_info():
     else:
         print(f"\n  Server running at: http://{settings.HOST}:{settings.PORT}\n")
 
+    # Prompt user to open browser
+    print("  * 请在浏览器中打开上述 URL 以访问 Quantum Switch")
+    print("  * Please open the above URL in your browser to access Quantum Switch\n")
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -198,8 +202,12 @@ app.include_router(game.router, prefix="/api")
 
 # Try to serve static frontend files
 if IS_FROZEN:
-    # In frozen mode, frontend files are in the bundle directory
-    frontend_dist = Path(sys._MEIPASS) / "frontend" / "dist"
+    # In frozen mode, check external directory first, fallback to bundle
+    exe_dir = Path(sys.executable).parent
+    frontend_dist = exe_dir / "frontend"
+    if not frontend_dist.exists():
+        # Fallback to bundled files
+        frontend_dist = Path(sys._MEIPASS) / "frontend"
 else:
     # In development mode, frontend files are relative to backend
     frontend_dist = Path(__file__).parent.parent.parent / "frontend" / "dist"

@@ -66,8 +66,12 @@ watch(() => gameStore.autoRefresh, (enabled) => {
 })
 
 onMounted(async () => {
-  // Show warning dialog
-  warningDialog.value?.open()
+  // Show warning dialog only on first visit
+  const hasSeenWarning = localStorage.getItem('hasSeenWarning')
+  if (!hasSeenWarning) {
+    warningDialog.value?.open()
+    localStorage.setItem('hasSeenWarning', 'true')
+  }
 
   // Load initial data
   await Promise.all([
@@ -102,6 +106,8 @@ const handleSwitchSong = async () => {
 
   const success = await songStore.switchToCurrentSong()
   if (success) {
+    // Wait for game to process the switch before refreshing status
+    await new Promise(resolve => setTimeout(resolve, 500))
     // Refresh game status after switch
     await gameStore.refreshStatus()
   }
