@@ -58,6 +58,10 @@ jobs:
         New-Item -ItemType Directory -Force -Path "dist/QuantumSwitch/config"
         New-Item -ItemType Directory -Force -Path "dist/QuantumSwitch/logs"
 
+        # Add placeholder files to ensure directories are not empty
+        "# Config directory" | Out-File -FilePath "dist/QuantumSwitch/config/README.txt" -Encoding UTF8
+        "# Logs directory" | Out-File -FilePath "dist/QuantumSwitch/logs/.gitkeep" -Encoding UTF8
+
         # Verify .env exists before copying
         if (-not (Test-Path ".env")) {
           Write-Error ".env file not found in backend directory"
@@ -80,7 +84,7 @@ jobs:
       uses: actions/upload-artifact@v4
       with:
         name: QuantumSwitch-${{ github.sha }}
-        path: backend/dist/QuantumSwitch/**/*
+        path: backend/dist/QuantumSwitch/
         retention-days: 7
 
     - name: Create ZIP for Release
