@@ -52,7 +52,7 @@ jobs:
       run: |
         cd backend
         New-Item -ItemType Directory -Force -Path "dist/QuantumSwitch/config"
-        New-Item -ItemType Directory -Force -Path "dist/QuantumSwitch/logs
+        New-Item -ItemType Directory -Force -Path "dist/QuantumSwitch/logs"
         Copy-Item "dist/QuantumSwitch.exe" "dist/QuantumSwitch/"
         Copy-Item ".env" "dist/QuantumSwitch/config/.env.template"
         Copy-Item "icon.ico" "dist/QuantumSwitch/"
