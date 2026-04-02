@@ -61,19 +61,19 @@ jobs:
         }
         Get-ChildItem "../README*" | Copy-Item -Destination "dist/QuantumSwitch/"
 
-    - name: Create ZIP archive
-      run: |
-        cd backend/dist
-        $tag = "${{ github.ref_name }}"
-        if ($tag -match '^v') { $version = $tag } else { $version = "${{ github.sha }}".Substring(0, 7) }
-        Compress-Archive -Path QuantumSwitch -DestinationPath "QuantumSwitch_${version}_windows-x64.zip"
-
     - name: Upload artifact
       uses: actions/upload-artifact@v4
       with:
         name: QuantumSwitch-${{ github.sha }}
-        path: backend/dist/QuantumSwitch_*.zip
+        path: backend/dist/QuantumSwitch/
         retention-days: 7
+
+    - name: Create ZIP for Release
+      if: startsWith(github.ref, 'refs/tags/')
+      run: |
+        cd backend/dist
+        $version = "${{ github.ref_name }}".Substring(1)
+        Compress-Archive -Path QuantumSwitch -DestinationPath "QuantumSwitch_${version}_windows-x64.zip"
 
     - name: Create Release
       if: startsWith(github.ref, 'refs/tags/')
