@@ -1,21 +1,14 @@
 # -*- mode: python ; coding: utf-8 -*-
 from PyInstaller.building.build_main import Analysis, PYZ, EXE, COLLECT
-import sys
 import os
-from pathlib import Path
 
 block_cipher = None
-
-# Add virtual environment to path if running from venv
-venv_path = Path(sys.executable).parent.parent / 'Lib' / 'site-packages'
-if venv_path.exists():
-    sys.path.insert(0, str(venv_path))
 
 # When running from backend directory, paths are relative
 # The spec file is in backend/, and frontend is in ../frontend
 a = Analysis(
     ['build_entry.py'],
-    pathex=[os.getcwd(), str(venv_path)],
+    pathex=[os.getcwd()],
     binaries=[],
     datas=[
         ('app', 'app'),
