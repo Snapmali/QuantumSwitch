@@ -49,10 +49,21 @@ jobs:
         python -m PyInstaller build.spec
 
     - name: Prepare distribution package
+      shell: pwsh
       run: |
         cd backend
+        $ErrorActionPreference = 'Stop'
+
+        # Create directories
         New-Item -ItemType Directory -Force -Path "dist/QuantumSwitch/config"
         New-Item -ItemType Directory -Force -Path "dist/QuantumSwitch/logs"
+
+        # Verify .env exists before copying
+        if (-not (Test-Path ".env")) {
+          Write-Error ".env file not found in backend directory"
+          exit 1
+        }
+
         Copy-Item "dist/QuantumSwitch.exe" "dist/QuantumSwitch/"
         Copy-Item ".env" "dist/QuantumSwitch/config/.env.template"
         Copy-Item "icon.ico" "dist/QuantumSwitch/"
@@ -60,6 +71,10 @@ jobs:
           Copy-Item -Recurse "data/vanilla" "dist/QuantumSwitch/data/"
         }
         Get-ChildItem "../README*" | Copy-Item -Destination "dist/QuantumSwitch/"
+
+        # Debug: List contents
+        Write-Host "=== Directory structure ==="
+        Get-ChildItem -Recurse "dist/QuantumSwitch"
 
     - name: Upload artifact
       uses: actions/upload-artifact@v4
