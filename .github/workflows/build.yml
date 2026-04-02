@@ -1,0 +1,78 @@
+name: Build Windows Executable
+
+on:
+  push:
+    branches: [ master, main ]
+    tags: [ 'v*' ]
+  pull_request:
+    branches: [ master, main ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Set up Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20'
+        cache: 'npm'
+        cache-dependency-path: frontend/package-lock.json
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.13'
+        cache: 'pip'
+        cache-dependency-path: backend/requirements.txt
+
+    - name: Build frontend
+      run: |
+        cd frontend
+        npm ci
+        npm run build
+
+    - name: Install Python dependencies
+      run: |
+        cd backend
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        pip install pyinstaller
+
+    - name: Build executable with PyInstaller
+      run: |
+        cd backend
+        python -m PyInstaller build.spec
+
+    - name: Prepare distribution package
+      run: |
+        cd backend
+        New-Item -ItemType Directory -Force -Path "dist/QuantumSwitch/config"
+        New-Item -ItemType Directory -Force -Path "dist/QuantumSwitch/logs"
+        Copy-Item "dist/QuantumSwitch.exe" "dist/QuantumSwitch/"
+        Copy-Item ".env" "dist/QuantumSwitch/config/.env.template"
+        Copy-Item "icon.ico" "dist/QuantumSwitch/"
+        if (Test-Path "data/vanilla") {
+          Copy-Item -Recurse "data/vanilla" "dist/QuantumSwitch/data/"
+        }
+        if (Test-Path "../README.md") {
+          Copy-Item "../README.md" "dist/QuantumSwitch/"
+        }
+
+    - name: Upload artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: QuantumSwitch-${{ github.sha }}
+        path: backend/dist/QuantumSwitch/
+        retention-days: 7
+
+    - name: Create Release
+      if: startsWith(github.ref, 'refs/tags/')
+      uses: softprops/action-gh-release@v2
+      with:
+        files: backend/dist/QuantumSwitch/**
+        generate_release_notes: true
